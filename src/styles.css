@@ -1,0 +1,33 @@
+:root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #111827; background: #f4f6f8; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, select { font: inherit; }
+.shell { width: min(100%, 620px); min-height: 100vh; margin: 0 auto; padding: 22px 18px 38px; }
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 42px; }
+.brandMark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; background: #111827; color: white; }
+.brand strong, .brand span { display: block; }
+.brand strong { font-size: 17px; }
+.brand span { margin-top: 2px; font-size: 12px; color: #6b7280; }
+.hero { margin-bottom: 26px; }
+.eyebrow { display: flex; align-items: center; gap: 7px; margin: 0 0 9px; color: #4b5563; font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
+h1 { margin: 0; font-size: clamp(32px, 9vw, 48px); line-height: 1.02; letter-spacing: -.045em; }
+.hero > p:last-child { max-width: 520px; margin: 14px 0 0; color: #6b7280; font-size: 17px; line-height: 1.55; }
+.card { background: white; border: 1px solid #e5e7eb; border-radius: 18px; padding: 18px; }
+.areaCard label { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; font-weight: 700; }
+select { width: 100%; border: 1px solid #d1d5db; border-radius: 12px; background: white; padding: 13px; color: #111827; }
+.statusCard { display: flex; gap: 15px; margin-top: 14px; border-radius: 18px; padding: 20px; }
+.statusCard svg { flex: 0 0 auto; }
+.statusOk { background: #ecfdf5; color: #065f46; }
+.statusOut { background: #fff1f2; color: #9f1239; }
+.statusLabel { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.statusCard h2 { margin: 4px 0 5px; font-size: 20px; }
+.statusCard p { margin: 0; line-height: 1.45; opacity: .82; }
+.actions { display: grid; gap: 10px; margin: 18px 0; }
+button { display: flex; justify-content: center; align-items: center; gap: 9px; width: 100%; min-height: 54px; border-radius: 15px; border: 0; font-weight: 800; cursor: pointer; }
+.primary { background: #111827; color: white; }
+.secondary { background: white; color: #111827; border: 1px solid #d1d5db; }
+button:active { transform: translateY(1px); }
+.explanation h3 { margin: 0 0 7px; }
+.explanation p { margin: 0; color: #6b7280; line-height: 1.55; }
+footer { margin-top: 26px; text-align: center; color: #9ca3af; font-size: 12px; }
+@media (min-width: 600px) { .shell { padding-top: 36px; } .actions { grid-template-columns: 1fr 1fr; } }
