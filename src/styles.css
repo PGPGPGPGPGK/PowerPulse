@@ -131,6 +131,10 @@ p {
   text-align: center;
 }
 
+.demoBanner--live {
+  background: color-mix(in srgb, var(--ok) 14%, var(--surface));
+}
+
 .content {
   flex: 1;
   padding: 16px 16px 96px;
@@ -304,6 +308,39 @@ p {
   border-radius: 14px;
   color: var(--ok);
   font-weight: 600;
+}
+
+/* where the user is reporting from */
+.locationBar {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.locationBar__where {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.95rem;
+}
+
+.locationBar__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin-top: 10px;
+}
+
+.locationBar__controls .btn--sm {
+  margin-top: 0;
+}
+
+.locationBar__controls .field {
+  flex: 1;
+  min-width: 160px;
 }
 
 /* compact "view details" row */

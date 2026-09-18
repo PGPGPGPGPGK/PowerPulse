@@ -10,10 +10,10 @@ import { Card, DataList, DataRow, EmptyState } from './ui';
  */
 export function CommunityStatusCard({
   incident,
-  areaName,
+  localityLabel,
 }: {
   incident: Incident | null;
-  areaName: string;
+  localityLabel: string;
 }) {
   return (
     <Card
@@ -26,7 +26,7 @@ export function CommunityStatusCard({
     >
       {!incident ? (
         <EmptyState>
-          Nobody has reported an outage around {areaName} in the last few hours.
+          Nobody has reported an outage around {localityLabel} in the last few hours.
         </EmptyState>
       ) : (
         <>

@@ -6,8 +6,9 @@ import type { Area, GeoPoint, Incident, OfficialEvent } from '../types/outage';
  * ground size (the viewBox is in units of 10 m). MapLibre or Google Maps can
  * replace this component without changing anything that feeds it.
  *
- * Only approximate cluster circles are drawn. No exact user position is ever
- * plotted - the "you" marker is the area-level location the user selected.
+ * Only approximate cluster circles are drawn: one circle per incident, never a
+ * dot per household. The "you" marker is drawn for the viewer alone and is not
+ * part of any shared data.
  */
 
 const METRES_PER_DEG_LAT = 111_320;
@@ -50,22 +51,22 @@ export function IncidentMap({
   areas,
   incidents,
   officialEvents,
-  approxLocation,
+  viewerPoint,
   selectedIncidentId,
   onSelectIncident,
 }: {
   areas: Area[];
   incidents: Incident[];
   officialEvents: OfficialEvent[];
-  approxLocation: GeoPoint;
+  viewerPoint: GeoPoint;
   selectedIncidentId?: string;
   onSelectIncident: (incident: Incident) => void;
 }) {
   const projection = buildProjection([
     ...areas.map((area) => area.center),
-    ...incidents.map((incident) => incident.center),
+    ...incidents.map((incident) => incident.publicCenter),
     ...officialEvents.map((event) => event.center),
-    approxLocation,
+    viewerPoint,
   ]);
 
   const gridStep = 100; // 1 km
@@ -118,7 +119,7 @@ export function IncidentMap({
             }`}
             role="button"
             tabIndex={0}
-            aria-label={`${incident.areaName}: ${incident.reporterCount} reports, ${incident.status}`}
+            aria-label={`${incident.localityLabel}: ${incident.reporterCount} reports, ${incident.status}`}
             onClick={() => onSelectIncident(incident)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
@@ -128,13 +129,13 @@ export function IncidentMap({
             }}
           >
             <circle
-              cx={projection.toX(incident.center.lng)}
-              cy={projection.toY(incident.center.lat)}
+              cx={projection.toX(incident.publicCenter.lng)}
+              cy={projection.toY(incident.publicCenter.lat)}
               r={Math.max(projection.toRadius(incident.radiusMeters), MIN_TOUCH_R)}
             />
             <text
-              x={projection.toX(incident.center.lng)}
-              y={projection.toY(incident.center.lat) + 10}
+              x={projection.toX(incident.publicCenter.lng)}
+              y={projection.toY(incident.publicCenter.lat) + 10}
               textAnchor="middle"
             >
               {incident.reporterCount}
@@ -145,16 +146,16 @@ export function IncidentMap({
         <g className="map__you" aria-hidden="true">
           <circle
             className="map__you-halo"
-            cx={projection.toX(approxLocation.lng)}
-            cy={projection.toY(approxLocation.lat)}
+            cx={projection.toX(viewerPoint.lng)}
+            cy={projection.toY(viewerPoint.lat)}
             r="34"
           />
           <circle
-            cx={projection.toX(approxLocation.lng)}
-            cy={projection.toY(approxLocation.lat)}
+            cx={projection.toX(viewerPoint.lng)}
+            cy={projection.toY(viewerPoint.lat)}
             r="14"
           />
-          <text x={projection.toX(approxLocation.lng)} y={projection.toY(approxLocation.lat) - 26}>
+          <text x={projection.toX(viewerPoint.lng)} y={projection.toY(viewerPoint.lat) - 26}>
             You (approx.)
           </text>
         </g>

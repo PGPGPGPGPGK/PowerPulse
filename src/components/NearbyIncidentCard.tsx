@@ -12,14 +12,14 @@ export function NearbyIncidentCard({
   distanceMeters?: number;
   onOpen: (incident: Incident) => void;
 }) {
-  const place = incident.streets[0] ?? incident.areaName;
+  const place = incident.streets[0] ?? incident.localityLabel;
 
   return (
     <button type="button" className="incidentRow" onClick={() => onOpen(incident)}>
       <span className="incidentRow__main">
         <span className="incidentRow__title">
           {place}
-          {distanceMeters === undefined ? '' : ` · ${distanceLabel(distanceMeters)}`}
+          {distanceMeters === undefined ? '' : ` · ${distanceLabel(distanceMeters)} away`}
         </span>
         <span className="incidentRow__meta">
           <span className={`dot dot--${statusPresentation[incident.status].tone}`} aria-hidden="true" />

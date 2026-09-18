@@ -8,7 +8,7 @@ import { timeAgo } from './format';
 import { Card, EmptyState, StatusPill } from '../../components/ui';
 
 export function MapScreen({ onNavigate }: { onNavigate: (route: Route) => void }) {
-  const { areas, activeIncidents, officialEvents, approxLocation, areaStatus } = useOutages();
+  const { areas, activeIncidents, officialEvents, userLocation, areaStatus } = useOutages();
   const [selectedId, setSelectedId] = useState<string | undefined>(areaStatus.incident?.id);
 
   const selected = activeIncidents.find((incident) => incident.id === selectedId);
@@ -19,13 +19,13 @@ export function MapScreen({ onNavigate }: { onNavigate: (route: Route) => void }
         areas={areas}
         incidents={activeIncidents}
         officialEvents={officialEvents}
-        approxLocation={approxLocation}
+        viewerPoint={userLocation.point}
         selectedIncidentId={selectedId}
         onSelectIncident={(incident) => setSelectedId(incident.id)}
       />
 
       {selected ? (
-        <Card title={`${selected.streets[0] ?? selected.areaName} · ${selected.areaName}`}>
+        <Card title={`${selected.streets[0] ?? selected.localityLabel} · near ${selected.localityLabel}`}>
           <StatusPill status={selected.status} />
           <p className="statusCard__meta">
             {selected.reporterCount} reporting · last confirmed {timeAgo(selected.lastConfirmedAt)} ·

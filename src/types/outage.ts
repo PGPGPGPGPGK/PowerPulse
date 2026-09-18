@@ -10,6 +10,17 @@
  *   4. UI/DISPLAY ...... Route, AreaStatusView, StatusPresentation
  *
  * Community-reported reasons (2) and official reasons (3) are never merged.
+ *
+ * Location has two distinct kinds, which must not be confused:
+ *
+ *   - LOCAL ONLY: `UserLocation` may be a precise device fix. It stays in this
+ *     browser, is shown only to the person it belongs to, and is never stored
+ *     or shared.
+ *   - SHARED:  `ApproximateLocation` is what a report actually carries. It is
+ *     grid-snapped (~111 x 106 m) before it leaves the device, so no other
+ *     client ever receives a precise position.
+ *   - PUBLIC:  `Incident.publicCenter` + `radiusMeters` describe where a group
+ *     of approximate reports clusters. This is the only location the UI shows.
  */
 
 export interface GeoPoint {
@@ -17,39 +28,62 @@ export interface GeoPoint {
   lng: number;
 }
 
+/** Where a position came from. Manual positions are never called device-derived. */
+export type LocationSource = 'device' | 'manual';
+
+/**
+ * SHARED. A coordinate that has been coarsened for sharing (see
+ * `coarsenForSharing`). Deliberately approximate: it is never the device
+ * position, and it carries no accuracy or provenance that could imply more
+ * precision than the grid provides.
+ */
+export type ApproximateLocation = GeoPoint;
+
+/**
+ * LOCAL ONLY. Where the person using the app currently is, or says they are.
+ * May be a precise device fix; never leaves this browser at that precision.
+ */
+export interface UserLocation {
+  point: GeoPoint;
+  accuracyMeters?: number;
+  source: LocationSource;
+  /** Nearest pilot locality. A label for the UI, not a grouping key. */
+  localityId: string;
+  localityLabel: string;
+}
+
 // ------------------------------------------------------------- 1. RAW INPUT
 
 export interface User {
   id: string;
-  /** The prototype is anonymous-first; no authentication is implemented. */
+  /** The prototype is anonymous-first; no registration or login UI. */
   displayName?: string;
   favouriteAreaIds: string[];
   notificationsEnabled: boolean;
   createdAt: string;
 }
 
+/**
+ * A pilot locality. Used for navigation, labelling and as the manual location
+ * fallback - never as an incident boundary.
+ */
 export interface Area {
   id: string;
   name: string;
   city: 'Hyderabad';
-  /** Approximate neighbourhood centre. Used for map placement and defaults. */
+  /** Approximate locality centre, used as the manual fallback position. */
   center: GeoPoint;
 }
 
 export type ReportType = 'outage' | 'still_out' | 'restored';
 
-/**
- * One contribution from one person.
- *
- * `approxLocation` is coarsened before it is stored and is the only location
- * ever kept. No exact address or device GPS fix is stored or displayed.
- */
+/** One contribution from one person. */
 export interface Report {
   id: string;
   userId: string;
-  areaId: string;
   type: ReportType;
-  approxLocation: GeoPoint;
+  /** SHARED approximate location. Already coarsened. Never rendered raw. */
+  location: ApproximateLocation;
   /** Optional. Free text, e.g. "Sagar Ring Road". */
   street?: string;
   /** Optional. A community-reported reason, never an established cause. */
@@ -80,22 +114,25 @@ export type IncidentStatus = 'none' | 'possible' | 'confirmed' | 'restoring' | '
 export interface CommunityReason {
   code: CommunityReasonCode;
   label: string;
-  /** Number of independent reporters who selected it. */
+  /** How many independent reporters mentioned it. */
   reportedBy: number;
 }
 
 /**
- * Derived from a proximity cluster of reports. Never written by a client.
+ * Derived from a purely geographic cluster of reports. Never written by a
+ * client, and never bounded by a locality: reports on opposite sides of a
+ * locality boundary belong to the same incident when they are close enough.
  *
- * `radiusMeters` (<= 500 m) describes where reports are clustered. It does not
- * claim that every property inside the circle is without power.
+ * `publicCenter` + `radiusMeters` (<= 500 m) is the PUBLIC representation: it
+ * says where reports cluster, not that every property inside is affected.
  */
 export interface Incident {
   id: string;
-  areaId: string;
-  areaName: string;
-  center: GeoPoint;
+  publicCenter: GeoPoint;
   radiusMeters: number;
+  /** Nearest pilot locality to the centroid. A label only. */
+  localityId: string;
+  localityLabel: string;
   status: IncidentStatus;
   /** Distinct people reporting an outage. */
   reporterCount: number;
@@ -110,6 +147,12 @@ export interface Incident {
   streets: string[];
   /** True when every contributing report is demo data. */
   isMock: boolean;
+}
+
+/** An incident together with how far it is from the person looking at it. */
+export interface NearbyIncident {
+  incident: Incident;
+  distanceMeters: number;
 }
 
 // -------------------------------------------------------------- 3. OFFICIAL
@@ -133,6 +176,7 @@ export interface OfficialEvent {
   title: string;
   /** Stated by the source. Kept apart from community-reported reasons. */
   reason: string;
+  /** Localities the source names. Official data keeps its own geography. */
   areaIds: string[];
   center: GeoPoint;
   radiusMeters: number;
@@ -154,15 +198,13 @@ export type Route =
   | { name: 'history' }
   | { name: 'profile' };
 
-/** Everything the home screen needs for the currently selected area. */
+/** Everything the home screen needs for where the user currently is. */
 export interface AreaStatusView {
-  areaId: string;
-  areaName: string;
+  localityLabel: string;
   status: IncidentStatus;
-  /** Active incident nearest the user's approximate location, if any. */
+  /** The active incident at the user's location, if any. */
   incident: Incident | null;
-  otherIncidents: Incident[];
-  /** Official events for the area. Never merged into the community data. */
+  /** Official events for the surrounding locality. Never merged with above. */
   officialEvents: OfficialEvent[];
 }
 
@@ -176,5 +218,8 @@ export interface DemoScenario {
   id: string;
   label: string;
   description: string;
-  areaId: string;
+  /** The locality whose demo data shows this state. */
+  localityId: string;
+  /** Where to stand to see it. Becomes the viewer's manual location. */
+  point: GeoPoint;
 }

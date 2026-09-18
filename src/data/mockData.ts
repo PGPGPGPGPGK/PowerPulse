@@ -8,7 +8,7 @@ import type {
   Report,
   User,
 } from '../types/outage';
-import { areaById } from './areas';
+import { areaById, pilotAreas } from './areas';
 
 /**
  * DEMO DATA ONLY.
@@ -107,7 +107,7 @@ const clusters: ClusterSpec[] = [
     // Restored.
     key: 'chaitanyapuri-colony',
     areaId: 'chaitanyapuri',
-    north: 90,
+    north: -350,
     east: -60,
     reporters: 4,
     firstReportMinutesAgo: 95,
@@ -128,6 +128,19 @@ const clusters: ClusterSpec[] = [
     reasons: ['local_works', 'unknown'],
   },
   {
+    // Straddles the Kothapet / Chaitanyapuri boundary: one incident, whichever
+    // locality each individual report happens to be nearest to.
+    key: 'boundary-lane',
+    areaId: 'kothapet',
+    north: -306,
+    east: 106,
+    reporters: 4,
+    firstReportMinutesAgo: 12,
+    stillOutMinutesAgo: [3],
+    streets: ['Old Boundary Lane'],
+    reasons: ['line_fault'],
+  },
+  {
     // Small confirmed cluster with no official information.
     key: 'lb-nagar-chowrasta',
     areaId: 'lb-nagar',
@@ -141,8 +154,12 @@ const clusters: ClusterSpec[] = [
   },
 ];
 
+/** Where a demo cluster sits. Also used as the demo scenario's viewpoint. */
+const anchorOf = (spec: ClusterSpec): GeoPoint =>
+  offset(areaById(spec.areaId).center, spec.north, spec.east);
+
 const buildCluster = (spec: ClusterSpec): Report[] => {
-  const anchor = offset(areaById(spec.areaId).center, spec.north, spec.east);
+  const anchor = anchorOf(spec);
   const reports: Report[] = [];
 
   for (let i = 0; i < spec.reporters; i += 1) {
@@ -152,9 +169,8 @@ const buildCluster = (spec: ClusterSpec): Report[] => {
     reports.push({
       id: `${spec.key}-outage-${i}`,
       userId: `demo-user-${spec.key}-${i}`,
-      areaId: spec.areaId,
       type: 'outage',
-      approxLocation: offset(anchor, Math.sin(angle) * distance, Math.cos(angle) * distance),
+      location: offset(anchor, Math.sin(angle) * distance, Math.cos(angle) * distance),
       street: spec.streets?.[i % spec.streets.length],
       reasonCode: spec.reasons?.[i % spec.reasons.length],
       createdAt: minutesAgo(spec.firstReportMinutesAgo - i * 0.8),
@@ -166,9 +182,8 @@ const buildCluster = (spec: ClusterSpec): Report[] => {
     reports.push({
       id: `${spec.key}-stillout-${i}`,
       userId: `demo-user-${spec.key}-${i}`,
-      areaId: spec.areaId,
       type: 'still_out',
-      approxLocation: offset(anchor, 30 * (i + 1), -20 * (i + 1)),
+      location: offset(anchor, 30 * (i + 1), -20 * (i + 1)),
       createdAt: minutesAgo(mins),
       isMock: true,
     });
@@ -178,9 +193,8 @@ const buildCluster = (spec: ClusterSpec): Report[] => {
     reports.push({
       id: `${spec.key}-restored-${i}`,
       userId: `demo-user-${spec.key}-${i}`,
-      areaId: spec.areaId,
       type: 'restored',
-      approxLocation: offset(anchor, -25 * (i + 1), 25 * (i + 1)),
+      location: offset(anchor, -25 * (i + 1), 25 * (i + 1)),
       createdAt: minutesAgo(mins),
       isMock: true,
     });
@@ -334,10 +348,10 @@ const historySpecs: HistorySpec[] = [
 
 export const historyIncidents: Incident[] = historySpecs.map((spec) => ({
   id: spec.id,
-  areaId: spec.areaId,
-  areaName: areaById(spec.areaId).name,
-  center: areaById(spec.areaId).center,
+  publicCenter: areaById(spec.areaId).center,
   radiusMeters: 350,
+  localityId: spec.areaId,
+  localityLabel: areaById(spec.areaId).name,
   status: 'restored',
   reporterCount: spec.reporters,
   confirmationCount: spec.confirmations,
@@ -352,48 +366,67 @@ export const historyIncidents: Incident[] = historySpecs.map((spec) => ({
 
 // ---------------------------------------------------------- demo scenarios
 
-/** Each scenario points at the area whose seeded data shows that state. */
+/** Each scenario places the viewer where that state can be seen. */
+const anchorFor = (key: string): GeoPoint => {
+  const spec = clusters.find((cluster) => cluster.key === key);
+  return spec ? anchorOf(spec) : pilotAreas[0].center;
+};
+
 export const demoScenarios: DemoScenario[] = [
   {
     id: 'clear',
     label: 'Clear',
     description: 'No community reports and no official information.',
-    areaId: 'gachibowli',
+    localityId: 'gachibowli',
+    point: areaById('gachibowli').center,
   },
   {
     id: 'possible',
     label: 'Possible outage',
     description: 'A single report, not yet independently confirmed.',
-    areaId: 'uppal',
+    localityId: 'uppal',
+    point: anchorFor('uppal-depot'),
   },
   {
     id: 'confirmed',
     label: 'Community-confirmed outage',
-    description: 'Twelve nearby reports, plus a separate cluster in the same area.',
-    areaId: 'kothapet',
+    description: 'Twelve nearby reports, plus a separate cluster a few streets away.',
+    localityId: 'kothapet',
+    point: anchorFor('kothapet-ring'),
+  },
+  {
+    id: 'cross-boundary',
+    label: 'Incident across a locality boundary',
+    description: 'One cluster whose reports sit on both sides of the Kothapet / Chaitanyapuri line.',
+    localityId: 'kothapet',
+    point: anchorFor('boundary-lane'),
   },
   {
     id: 'restoring',
     label: 'Possible restoration',
     description: 'Restoration signals arriving while others are still out.',
-    areaId: 'dilsukhnagar',
+    localityId: 'dilsukhnagar',
+    point: anchorFor('dilsukhnagar-bus'),
   },
   {
     id: 'restored',
     label: 'Restored',
     description: 'Enough independent restoration reports to read as back on.',
-    areaId: 'chaitanyapuri',
+    localityId: 'chaitanyapuri',
+    point: anchorFor('chaitanyapuri-colony'),
   },
   {
     id: 'official',
     label: 'Scheduled official information',
     description: 'A mock scheduled interruption with no community reports.',
-    areaId: 'madhapur',
+    localityId: 'madhapur',
+    point: areaById('madhapur').center,
   },
   {
     id: 'official-community',
     label: 'Official information + community reports',
     description: 'Mock planned works alongside active community reports.',
-    areaId: 'kondapur',
+    localityId: 'kondapur',
+    point: anchorFor('kondapur-botanical'),
   },
 ];

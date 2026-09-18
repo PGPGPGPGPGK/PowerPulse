@@ -21,7 +21,7 @@ export function HistoryScreen({ onNavigate }: { onNavigate: (route: Route) => vo
         </Card>
       ) : (
         history.map((incident) => (
-          <Card key={incident.id} title={`${incident.areaName} · ${incident.streets[0] ?? 'Area'}`}>
+          <Card key={incident.id} title={`${incident.localityLabel} · ${incident.streets[0] ?? 'Area'}`}>
             <DataList>
               <DataRow label="Started" value={timeAgo(incident.firstReportedAt)} />
               <DataRow

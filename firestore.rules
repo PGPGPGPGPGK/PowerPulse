@@ -1,0 +1,70 @@
+rules_version = '2';
+
+// PowerPulse Firestore rules - Phase 1 (shared community reports).
+//
+// Principles:
+//   - reports are append-only observations, each owned by the signed-in UID
+//     that wrote it; nobody can edit or delete history
+//   - a report's location is APPROXIMATE by construction: clients coarsen it to
+//     a ~111 x 106 m grid before writing, and no accuracy or provenance field
+//     is accepted, so a precise device position cannot be stored or read back
+//     by another client
+//   - clients never write aggregates; incident counts are derived, not stored
+//   - createdAt must be the server's time, never a client clock
+//   - nothing else in the database is readable or writable
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidLocation(location) {
+      // Only the approximate coordinate. Accuracy and provenance are
+      // deliberately not accepted: they would imply precision the stored
+      // point does not have.
+      return location is map
+        && location.keys().hasOnly(['lat', 'lng'])
+        && location.lat is number && location.lat >= -90 && location.lat <= 90
+        && location.lng is number && location.lng >= -180 && location.lng <= 180;
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll(['userId', 'action', 'location', 'createdAt'])
+        && data.keys().hasOnly(
+             ['userId', 'action', 'location', 'street', 'communityReason', 'incidentId', 'createdAt']
+           )
+        // A user can only ever write a report as themselves.
+        && data.userId is string
+        && data.userId == request.auth.uid
+        && data.action in ['outage', 'still_out', 'restored']
+        && isValidLocation(data.location)
+        // Server timestamp only: client clocks are not authoritative.
+        && data.createdAt == request.time
+        && (!('street' in data) || (data.street is string && data.street.size() <= 120))
+        && (!('communityReason' in data)
+             || (data.communityReason is string && data.communityReason.size() <= 40))
+        && (!('incidentId' in data)
+             || (data.incidentId is string && data.incidentId.size() <= 200));
+    }
+
+    match /reports/{reportId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidReport(request.resource.data);
+      // Append-only: an observation, once made, cannot be rewritten or removed.
+      allow update, delete: if false;
+    }
+
+    // Reserved for server-side aggregation in a later phase. Clients may read
+    // it when it exists, but may never write an incident count.
+    match /incidents/{incidentId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

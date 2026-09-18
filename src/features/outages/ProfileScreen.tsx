@@ -51,9 +51,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (route: Route) => vo
       <Card title="Privacy">
         <ul className="bullets">
           <li>
-            Public reports use an approximate location. Your exact device location is never shown to
-            other users.
+            Reports are saved with a coarsened location, on a grid of roughly 100 m. Your exact
+            device position never leaves this device, so no other user can receive it.
           </li>
+          <li>Accuracy readings from your device are shown to you only, and are never stored.</li>
           <li>Map circles show where reports cluster, not who reported.</li>
           <li>This prototype stores everything in your browser session only.</li>
         </ul>
@@ -78,32 +79,32 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (route: Route) => vo
         </p>
       </Card>
 
-      <details className="optional">
-        <summary>Developer / demo controls</summary>
+      {demoScenarios.length === 0 ? null : (
+        <details className="optional">
+          <summary>Developer / demo controls</summary>
 
-        <p className="note">
-          Each option jumps to the area whose demo data shows that state.
-        </p>
-        <div className="scenarioList">
-          {demoScenarios.map((scenario) => (
-            <button
-              key={scenario.id}
-              type="button"
-              className={`scenario${activeScenarioId === scenario.id ? ' is-active' : ''}`}
-              onClick={() => {
-                applyDemoScenario(scenario);
-                onNavigate({ name: 'home' });
-              }}
-            >
-              <span className="scenario__label">{scenario.label}</span>
-              <span className="scenario__description">{scenario.description}</span>
-            </button>
-          ))}
-        </div>
-        <button type="button" className="btn btn--ghost btn--sm" onClick={resetDemoData}>
-          Reset demo data
-        </button>
-      </details>
+          <p className="note">Each option jumps to the area whose demo data shows that state.</p>
+          <div className="scenarioList">
+            {demoScenarios.map((scenario) => (
+              <button
+                key={scenario.id}
+                type="button"
+                className={`scenario${activeScenarioId === scenario.id ? ' is-active' : ''}`}
+                onClick={() => {
+                  applyDemoScenario(scenario);
+                  onNavigate({ name: 'home' });
+                }}
+              >
+                <span className="scenario__label">{scenario.label}</span>
+                <span className="scenario__description">{scenario.description}</span>
+              </button>
+            ))}
+          </div>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={resetDemoData}>
+            Reset demo data
+          </button>
+        </details>
+      )}
     </div>
   );
 }

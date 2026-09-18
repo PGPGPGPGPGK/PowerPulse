@@ -14,7 +14,7 @@ import type {
   OutageRepository,
   SubmitResult,
 } from './outageRepository';
-import { areaById, pilotAreas } from '../data/areas';
+import { areaById, localityFor, pilotAreas } from '../data/areas';
 import { communityReasons } from '../data/reasons';
 import {
   demoScenarios,
@@ -25,7 +25,7 @@ import {
   seedReports,
 } from '../data/mockData';
 import { deriveIncidents, isActive } from '../features/outages/deriveIncidents';
-import { coarsen, distanceMeters } from '../features/outages/geo';
+import { coarsenForSharing, distanceMeters } from '../features/outages/geo';
 
 /**
  * In-memory implementation backed by the demo dataset.
@@ -34,11 +34,18 @@ import { coarsen, distanceMeters } from '../features/outages/geo';
  * `data/mockData`.
  */
 class MockOutageRepository implements OutageRepository {
+  readonly sourceKind = 'mock' as const;
+
   private reports: Report[] = [...seedReports];
 
   private cache: { source: Report[]; incidents: Incident[] } | null = null;
 
   private nextId = 0;
+
+  /** Local data never changes underneath the UI, so nothing to notify. */
+  subscribe(): () => void {
+    return () => {};
+  }
 
   listAreas(): Area[] {
     return pilotAreas;
@@ -60,7 +67,7 @@ class MockOutageRepository implements OutageRepository {
     if (this.cache?.source !== this.reports) {
       this.cache = {
         source: this.reports,
-        incidents: deriveIncidents(this.reports, (id) => areaById(id).name),
+        incidents: deriveIncidents(this.reports, localityFor),
       };
     }
     return this.cache.incidents;
@@ -83,8 +90,7 @@ class MockOutageRepository implements OutageRepository {
       .filter(
         (report) =>
           report.userId === demoUser.id &&
-          report.areaId === incident.areaId &&
-          distanceMeters(incident.center, report.approxLocation) <= incident.radiusMeters,
+          distanceMeters(incident.publicCenter, report.location) <= incident.radiusMeters,
       )
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
@@ -93,9 +99,9 @@ class MockOutageRepository implements OutageRepository {
     return latest.type === 'restored' ? 'restored' : 'reported';
   }
 
-  listOfficialEvents(areaId?: string): OfficialEvent[] {
-    if (!areaId) return officialEvents;
-    return officialEvents.filter((event) => event.areaIds.includes(areaId));
+  listOfficialEvents(localityId?: string): OfficialEvent[] {
+    if (!localityId) return officialEvents;
+    return officialEvents.filter((event) => event.areaIds.includes(localityId));
   }
 
   getOfficialSource(sourceId: string): OfficialSource | undefined {
@@ -118,10 +124,9 @@ class MockOutageRepository implements OutageRepository {
     const report: Report = {
       id: `local-${this.nextId++}`,
       userId: demoUser.id,
-      areaId: input.areaId,
       type: input.type,
-      // Coarsened here so no precise position can reach storage or the UI.
-      approxLocation: coarsen(input.approxLocation),
+      // Same boundary as the shared repository: stored points are approximate.
+      location: coarsenForSharing(input.location),
       street: input.street?.trim() || undefined,
       reasonCode: input.reasonCode,
       createdAt: new Date().toISOString(),
@@ -133,8 +138,7 @@ class MockOutageRepository implements OutageRepository {
     const incident =
       this.listIncidents().find(
         (candidate) =>
-          candidate.areaId === report.areaId &&
-          distanceMeters(candidate.center, report.approxLocation) <= candidate.radiusMeters,
+          distanceMeters(candidate.publicCenter, report.location) <= candidate.radiusMeters,
       ) ?? null;
 
     return { report, incident };

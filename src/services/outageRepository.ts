@@ -3,10 +3,10 @@ import type {
   CommunityReasonCode,
   CommunityReasonOption,
   DemoScenario,
-  GeoPoint,
   Incident,
   OfficialEvent,
   OfficialSource,
+  ApproximateLocation,
   Report,
   ReportType,
   User,
@@ -19,17 +19,22 @@ import type {
  * `features/outages/OutageContext`), never to `data/mockData`. Swapping the
  * mock implementation for Firestore means writing one new class here.
  *
- * ponytail: the methods are synchronous because the prototype's data is
- * in-memory. A Firebase implementation will be async - only OutageContext
- * calls the repository, so that migration touches one file.
+ * The read methods are synchronous on purpose: an implementation keeps an
+ * in-memory view of the reports it has (seeded, or streamed from Firestore)
+ * and answers from that, then calls its `subscribe` listeners when the view
+ * changes. That keeps the UI free of loading states and per-call promises.
+ * Writes are fire-and-forget: the new state arrives through `subscribe`.
  */
 
 /** Raw user input for a new contribution. Nothing derived, nothing official. */
 export interface NewReportInput {
-  areaId: string;
   type: ReportType;
-  /** Approximate location. Exact addresses are never captured or stored. */
-  approxLocation: GeoPoint;
+  /**
+   * The location this report will be SHARED with. Callers pass an already
+   * coarsened point (see `coarsenForSharing`); implementations coarsen again
+   * before persisting. A precise device coordinate must never reach here.
+   */
+  location: ApproximateLocation;
   /** Optional. */
   street?: string;
   /** Optional community-reported reason. */
@@ -46,6 +51,15 @@ export interface SubmitResult {
 }
 
 export interface OutageRepository {
+  /** Which backend is answering. Used to label demo vs shared live data. */
+  readonly sourceKind: 'mock' | 'firebase';
+
+  /**
+   * Called whenever the underlying data changes. Returns an unsubscribe
+   * function. The mock implementation never fires.
+   */
+  subscribe(listener: () => void): () => void;
+
   listAreas(): Area[];
   getArea(areaId: string): Area;
   listReasonOptions(): CommunityReasonOption[];
@@ -59,8 +73,11 @@ export interface OutageRepository {
   /** The current user's own latest contribution to an incident, if any. */
   getMyReportState(incident: Incident): MyReportState;
 
-  /** Official/public-source information. Never merged with community data. */
-  listOfficialEvents(areaId?: string): OfficialEvent[];
+  /**
+   * Official/public-source information for a locality label. Official data
+   * keeps its own geography; it is never merged with community reports.
+   */
+  listOfficialEvents(localityId?: string): OfficialEvent[];
   getOfficialSource(sourceId: string): OfficialSource | undefined;
 
   /** Past community-reported incidents. */

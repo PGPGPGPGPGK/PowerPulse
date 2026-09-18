@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bolt } from 'lucide-react';
+import { Bolt, Crosshair } from 'lucide-react';
 import type { CommunityReasonCode, Route } from '../../types/outage';
 import { useOutages } from './OutageContext';
 import { AreaSelect, Card } from '../../components/ui';
@@ -9,19 +9,25 @@ import { AreaSelect, Card } from '../../components/ui';
  * Location, street and reason are all optional detours.
  */
 export function ReportOutageScreen({ onNavigate }: { onNavigate: (route: Route) => void }) {
-  const { areas, areaId, setAreaId, approxLocation, reasonOptions, submitReport } = useOutages();
+  const {
+    areas,
+    userLocation,
+    locationPermission,
+    requestDeviceLocation,
+    selectLocality,
+    reasonOptions,
+    submitReport,
+  } = useOutages();
   const [changingLocation, setChangingLocation] = useState(false);
   const [street, setStreet] = useState('');
   const [reasonCode, setReasonCode] = useState<CommunityReasonCode | ''>('');
 
-  const areaName = areas.find((area) => area.id === areaId)?.name ?? '';
+  const usingDevice = userLocation.source === 'device';
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     const { incident } = submitReport({
-      areaId,
       type: 'outage',
-      approxLocation,
       street: street || undefined,
       reasonCode: reasonCode || undefined,
     });
@@ -32,10 +38,30 @@ export function ReportOutageScreen({ onNavigate }: { onNavigate: (route: Route) 
     <form className="screen" onSubmit={submit}>
       <Card title="Approximate location">
         {changingLocation ? (
-          <AreaSelect areas={areas} value={areaId} onChange={setAreaId} label="Location" />
+          <>
+            <AreaSelect
+              areas={areas}
+              value={userLocation.localityId}
+              onChange={selectLocality}
+              label="Area"
+            />
+            {locationPermission === 'denied' || locationPermission === 'unavailable' ? null : (
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={requestDeviceLocation}
+                disabled={locationPermission === 'requesting'}
+              >
+                <Crosshair size={16} aria-hidden="true" />
+                {locationPermission === 'requesting' ? 'Finding you…' : 'Use my location instead'}
+              </button>
+            )}
+          </>
         ) : (
           <div className="locationRow">
-            <p className="lead">Near {areaName}</p>
+            <p className="lead">
+              {usingDevice ? 'Near you' : `Near ${userLocation.localityLabel}`}
+            </p>
             <button
               type="button"
               className="btn btn--ghost btn--sm"
@@ -46,8 +72,9 @@ export function ReportOutageScreen({ onNavigate }: { onNavigate: (route: Route) 
           </div>
         )}
         <p className="note">
-          Location is approximate in this prototype. PowerPulse never publicly shows your exact
-          location.
+          {usingDevice
+            ? `Your device puts you within about ${userLocation.accuracyMeters ?? '?'} m, but only a coarsened point (roughly 100 m) is saved with your report. PowerPulse never stores or shows your exact location.`
+            : 'Location is approximate in this prototype. Only a coarsened point is saved with your report - never your exact location.'}
         </p>
       </Card>
 

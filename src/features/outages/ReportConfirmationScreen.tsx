@@ -22,11 +22,11 @@ export function ReportConfirmationScreen({
         </span>
         <div className="statusCard__body">
           <h2>Report received</h2>
-          <p>Thanks. Your report was added to the community picture for {areaStatus.areaName}.</p>
+          <p>Thanks. Your report was added to the community picture near {areaStatus.localityLabel}.</p>
         </div>
       </section>
 
-      <CommunityStatusCard incident={incident} areaName={areaStatus.areaName} />
+      <CommunityStatusCard incident={incident} localityLabel={areaStatus.localityLabel} />
 
       <Card title="What happens next">
         <ol className="steps">

@@ -3,9 +3,10 @@ import type { Route } from '../../types/outage';
 import { useOutages } from './OutageContext';
 import { StatusCard } from '../../components/StatusCard';
 import { ReportActions } from '../../components/ReportActions';
+import { LocationBar } from '../../components/LocationBar';
 import { OfficialInfoCard } from '../../components/OfficialInfoCard';
 import { NearbyIncidentCard } from '../../components/NearbyIncidentCard';
-import { AreaSelect, EmptyState } from '../../components/ui';
+import { EmptyState } from '../../components/ui';
 
 /**
  * Home answers four things and nothing more: is there an outage near me, how
@@ -15,8 +16,10 @@ import { AreaSelect, EmptyState } from '../../components/ui';
 export function HomeScreen({ onNavigate }: { onNavigate: (route: Route) => void }) {
   const {
     areas,
-    areaId,
-    setAreaId,
+    userLocation,
+    locationPermission,
+    requestDeviceLocation,
+    selectLocality,
     areaStatus,
     nearbyIncidents,
     getMyReportState,
@@ -29,7 +32,13 @@ export function HomeScreen({ onNavigate }: { onNavigate: (route: Route) => void 
 
   return (
     <div className="screen">
-      <AreaSelect areas={areas} value={areaId} onChange={setAreaId} />
+      <LocationBar
+        areas={areas}
+        location={userLocation}
+        permission={locationPermission}
+        onUseDevice={requestDeviceLocation}
+        onSelectLocality={selectLocality}
+      />
 
       <StatusCard status={areaStatus.status} incident={incident} />
 

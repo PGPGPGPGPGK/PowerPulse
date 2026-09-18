@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Route } from './types/outage';
+import type { OutageRepository } from './services/outageRepository';
 import { OutageProvider } from './features/outages/OutageContext';
 import { HomeScreen } from './features/outages/HomeScreen';
 import { ReportOutageScreen } from './features/outages/ReportOutageScreen';
@@ -25,12 +26,13 @@ const titles: Record<Route['name'], { title: string; subtitle?: string }> = {
 const isSecondary = (name: Route['name']) =>
   name === 'report' || name === 'confirmation' || name === 'incident';
 
-export default function App() {
+export default function App({ repository }: { repository?: OutageRepository }) {
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const { title, subtitle } = titles[route.name];
+  const isLive = repository?.sourceKind === 'firebase';
 
   return (
-    <OutageProvider>
+    <OutageProvider repository={repository}>
       <div className="app">
         <AppHeader
           title={title}
@@ -38,8 +40,10 @@ export default function App() {
           onBack={isSecondary(route.name) ? () => setRoute({ name: 'home' }) : undefined}
         />
 
-        <p className="demoBanner">
-          Prototype · All outage information shown is demo data.
+        <p className={isLive ? 'demoBanner demoBanner--live' : 'demoBanner'}>
+          {isLive
+            ? 'Prototype · Community reports are shared live between devices.'
+            : 'Prototype · All outage information shown is demo data.'}
         </p>
 
         <main className="content">

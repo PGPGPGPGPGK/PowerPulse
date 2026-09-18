@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type {
   Area,
@@ -7,8 +7,10 @@ import type {
   DemoScenario,
   GeoPoint,
   Incident,
+  NearbyIncident,
   OfficialEvent,
   OfficialSource,
+  UserLocation,
 } from '../../types/outage';
 import type {
   MyReportState,
@@ -17,24 +19,24 @@ import type {
   SubmitResult,
 } from '../../services/outageRepository';
 import { mockOutageRepository } from '../../services/mockOutageRepository';
-import { distanceMeters } from './geo';
-import { NEARBY_RADIUS_M } from './deriveIncidents';
-
-/** An incident plus how far it is from the user's approximate location. */
-export interface NearbyIncident {
-  incident: Incident;
-  distanceMeters: number;
-}
-
-/** Nearby means geographically nearby, never "somewhere else in the city". */
-const MAX_NEARBY = 3;
+import { incidentAtLocation, rankNearby } from './deriveIncidents';
+import { coarsenForSharing } from './geo';
+import { toUserLocation, useUserLocation } from '../location/useUserLocation';
+import type { LocationPermission } from '../location/useUserLocation';
 
 /**
  * The only consumer of the repository.
  *
  * Screens read everything from this hook, so replacing the mock repository
  * with Firebase (and its async reads) is a change to this file alone.
+ *
+ * Location concepts are kept apart here too: `userLocation` is where the
+ * person is (internal, never rendered raw), while everything an incident
+ * exposes is the public approximate cluster.
  */
+
+/** How many nearby incidents the home screen lists. */
+const MAX_NEARBY = 3;
 
 interface Snapshot {
   activeIncidents: Incident[];
@@ -49,14 +51,21 @@ const readSnapshot = (repository: OutageRepository): Snapshot => ({
 });
 
 interface OutageContextValue extends Snapshot {
+  /** Which backend is serving this session: demo data or shared live data. */
+  sourceKind: OutageRepository['sourceKind'];
   areas: Area[];
   reasonOptions: CommunityReasonOption[];
-  areaId: string;
-  setAreaId: (id: string) => void;
-  /** Approximate reporting location. Never an exact stored GPS fix. */
-  approxLocation: GeoPoint;
+  /**
+   * LOCAL ONLY. May be a precise device fix. Shown back to this user, used to
+   * rank what is near them, and coarsened before any report is shared.
+   */
+  userLocation: UserLocation;
+  locationPermission: LocationPermission;
+  requestDeviceLocation: () => void;
+  /** Manual fallback: pick one of the pilot localities. */
+  selectLocality: (localityId: string) => void;
   areaStatus: AreaStatusView;
-  /** Closest active incidents to the user, excluding the one shown as status. */
+  /** Closest active incidents, excluding the one at the user's location. */
   nearbyIncidents: NearbyIncident[];
   getIncident: (id: string) => Incident | undefined;
   getMyReportState: (incident: Incident) => MyReportState;
@@ -65,8 +74,9 @@ interface OutageContextValue extends Snapshot {
   toggleFavourite: (id: string) => void;
   notificationsEnabled: boolean;
   setNotificationsEnabled: (value: boolean) => void;
-  submitReport: (input: NewReportInput) => SubmitResult;
-  /** Adds a still-out or restored signal to an existing incident. */
+  /** The location is taken from `userLocation`, never passed in by a screen. */
+  submitReport: (input: Omit<NewReportInput, 'location'>) => SubmitResult;
+  /** Adds a still-out or restored signal from where the user is. */
   respondToIncident: (incident: Incident, type: 'still_out' | 'restored') => void;
   demoScenarios: DemoScenario[];
   activeScenarioId: string | null;
@@ -85,69 +95,72 @@ export function OutageProvider({
 }) {
   const user = repository.getCurrentUser();
   const areas = repository.listAreas();
-  const defaultAreaId = user.favouriteAreaIds[0] ?? areas[0].id;
+  const startingArea = repository.getArea(user.favouriteAreaIds[0] ?? areas[0].id);
 
   const [snapshot, setSnapshot] = useState<Snapshot>(() => readSnapshot(repository));
-  const [areaId, setAreaIdState] = useState(defaultAreaId);
-  const [approxLocation, setApproxLocation] = useState<GeoPoint>(
-    repository.getArea(defaultAreaId).center,
-  );
   const [favouriteAreaIds, setFavouriteAreaIds] = useState(user.favouriteAreaIds);
   const [notificationsEnabled, setNotificationsEnabled] = useState(user.notificationsEnabled);
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
 
-  const setAreaId = (id: string) => {
-    setAreaIdState(id);
-    // The reporting location follows the chosen area: area-level precision only.
-    setApproxLocation(repository.getArea(id).center);
-  };
+  // Starts on a manually selected locality centre: no permission prompt on
+  // startup, and nothing is presented as a device fix until one is granted.
+  const { location, permission, requestDeviceLocation, setManualLocation } = useUserLocation(
+    toUserLocation(startingArea.center, 'manual'),
+  );
 
-  const submitReport = (input: NewReportInput) => {
-    const result = repository.submitReport(input);
+  // Realtime sources push new reports in; the mock source never fires.
+  useEffect(() => repository.subscribe(() => setSnapshot(readSnapshot(repository))), [repository]);
+
+  const submitReport = (input: Omit<NewReportInput, 'location'>) => {
+    // The precise device position stops here: only a grid-snapped approximate
+    // point, with no accuracy and no provenance, is ever shared.
+    const result = repository.submitReport({
+      ...input,
+      location: coarsenForSharing(location.point),
+    });
     setSnapshot(readSnapshot(repository));
     return result;
   };
 
-  const respondToIncident = (incident: Incident, type: 'still_out' | 'restored') => {
-    submitReport({ areaId: incident.areaId, type, approxLocation: incident.center });
+  const respondToIncident = (_incident: Incident, type: 'still_out' | 'restored') => {
+    submitReport({ type });
   };
 
-  const area = repository.getArea(areaId);
-  const inArea = snapshot.activeIncidents.filter((incident) => incident.areaId === areaId);
-  const nearest = [...inArea].sort(
-    (a, b) => distanceMeters(a.center, approxLocation) - distanceMeters(b.center, approxLocation),
-  )[0];
+  const setManualPoint = (point: GeoPoint) => setManualLocation(point);
+
+  // Status is geographic: the incident the user is standing in, whatever
+  // locality it happens to be labelled with.
+  const incident = incidentAtLocation(snapshot.activeIncidents, location.point);
 
   const areaStatus: AreaStatusView = {
-    areaId,
-    areaName: area.name,
-    status: nearest?.status ?? 'none',
-    incident: nearest ?? null,
-    otherIncidents: inArea.filter((incident) => incident.id !== nearest?.id),
-    officialEvents: repository.listOfficialEvents(areaId),
+    localityLabel: location.localityLabel,
+    status: incident?.status ?? 'none',
+    incident,
+    officialEvents: repository.listOfficialEvents(location.localityId),
   };
 
-  const nearbyIncidents: NearbyIncident[] = snapshot.activeIncidents
-    .filter((incident) => incident.id !== nearest?.id)
-    .map((incident) => ({
-      incident,
-      distanceMeters: distanceMeters(incident.center, approxLocation),
-    }))
-    .filter((entry) => entry.distanceMeters <= NEARBY_RADIUS_M)
-    .sort((a, b) => a.distanceMeters - b.distanceMeters)
-    .slice(0, MAX_NEARBY);
+  const nearbyIncidents = rankNearby(
+    snapshot.activeIncidents.filter((candidate) => candidate.id !== incident?.id),
+    location.point,
+    { limit: MAX_NEARBY },
+  );
 
   const value: OutageContextValue = {
     ...snapshot,
+    sourceKind: repository.sourceKind,
     areas,
     reasonOptions: repository.listReasonOptions(),
-    areaId,
-    setAreaId,
-    approxLocation,
+    userLocation: location,
+    locationPermission: permission,
+    requestDeviceLocation,
+    selectLocality: (localityId) => {
+      setActiveScenarioId(null);
+      setManualPoint(repository.getArea(localityId).center);
+    },
     areaStatus,
     nearbyIncidents,
     getIncident: (id) => repository.getIncident(id),
-    getMyReportState: (incident) => repository.getMyReportState(incident),
+    getMyReportState: (target) => repository.getMyReportState(target),
     getOfficialSource: (id) => repository.getOfficialSource(id),
     favouriteAreaIds,
     toggleFavourite: (id) =>
@@ -162,7 +175,7 @@ export function OutageProvider({
     activeScenarioId,
     applyDemoScenario: (scenario) => {
       setActiveScenarioId(scenario.id);
-      setAreaId(scenario.areaId);
+      setManualPoint(scenario.point);
     },
     resetDemoData: () => {
       repository.resetDemoData();

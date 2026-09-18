@@ -64,6 +64,37 @@ npm run lint
 npm run check    # self-check for the incident derivation rules
 ```
 
+## Firebase (Phase 1)
+
+Community reports are shared between devices through Cloud Firestore, with
+anonymous Firebase Authentication. Nothing else is connected: no official
+sources, no maps, no notifications, no analytics, no Cloud Functions. Runs
+within the Spark (free) plan.
+
+1. Copy `.env.example` to `.env.local` and fill in the web config from
+   Firebase console → Project settings → General → Your apps.
+2. Publish the rules in `firestore.rules`, either from the Firestore console
+   (Rules tab) or with `npx firebase-tools deploy --only firestore:rules`.
+3. `npm run dev`. Without the environment variables the app falls back to the
+   demo repository, and the banner says which source is live.
+
+Collections: `reports` only (append-only observations). Incidents are still
+derived on the client from those reports, by geographic proximity alone.
+
+Location: browser geolocation is requested only when the user taps *Use my
+location*, and a manually selected pilot locality is always available as a
+fallback. Manual positions are labelled approximate and never presented as a
+device fix.
+
+Privacy: a precise device position never leaves the browser. Before a report is
+created it is snapped to a 3-decimal-degree grid (about 111 x 106 m at this
+latitude), and that approximate point is the only coordinate stored. Device
+accuracy is shown to its owner and never persisted. Reports are readable by any
+signed-in client, which is exactly why nothing precise is written into them.
+
+Hosting stays on GitHub Pages; the Firebase config is build-time configuration,
+so a Pages build needs the same variables supplied at build time.
+
 ## Current status
 
 Clickable frontend prototype running on **demo data only**. No Firebase, no
