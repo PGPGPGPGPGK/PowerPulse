@@ -32,7 +32,7 @@ import type { FirebaseContext } from './firebase';
 import { buildReportFields } from './reportDocument';
 import { areaById, localityFor, pilotAreas } from '../data/areas';
 import { communityReasons } from '../data/reasons';
-import { deriveIncidents, isActive } from '../features/outages/deriveIncidents';
+import { deriveIncidents, deriveMyReportState, isActive } from '../features/outages/deriveIncidents';
 import { distanceMeters } from '../features/outages/geo';
 
 /**
@@ -85,6 +85,12 @@ function toReport(snapshot: QueryDocumentSnapshot<DocumentData>): Report | null 
   };
 }
 
+/**
+ * Derived incidents are re-computed at least this often, so an incident that
+ * quietly ages past the active window updates without new reports arriving.
+ */
+const CACHE_TTL_MS = 30_000;
+
 export class FirebaseOutageRepository implements OutageRepository {
   readonly sourceKind = 'firebase' as const;
 
@@ -94,7 +100,8 @@ export class FirebaseOutageRepository implements OutageRepository {
 
   private reports: Report[] = [];
 
-  private incidentCache: { source: Report[]; incidents: Incident[] } | null = null;
+  private incidentCache: { source: Report[]; derivedAt: number; incidents: Incident[] } | null =
+    null;
 
   private listeners = new Set<() => void>();
 
@@ -176,9 +183,12 @@ export class FirebaseOutageRepository implements OutageRepository {
   }
 
   listIncidents(): Incident[] {
-    if (this.incidentCache?.source !== this.reports) {
+    // Statuses age, so the cache expires on time as well as on new reports.
+    const stale = !this.incidentCache || Date.now() - this.incidentCache.derivedAt > CACHE_TTL_MS;
+    if (stale || this.incidentCache?.source !== this.reports) {
       this.incidentCache = {
         source: this.reports,
+        derivedAt: Date.now(),
         incidents: deriveIncidents(this.reports, localityFor),
       };
     }
@@ -194,17 +204,12 @@ export class FirebaseOutageRepository implements OutageRepository {
   }
 
   getMyReportState(incident: Incident): MyReportState {
-    const mine = this.reports
-      .filter(
-        (report) =>
-          report.userId === this.uid &&
-          distanceMeters(incident.publicCenter, report.location) <= incident.radiusMeters,
-      )
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-
-    const latest = mine[mine.length - 1];
-    if (!latest) return 'none';
-    return latest.type === 'restored' ? 'restored' : 'reported';
+    const mine = this.reports.filter(
+      (report) =>
+        report.userId === this.uid &&
+        distanceMeters(incident.publicCenter, report.location) <= incident.radiusMeters,
+    );
+    return deriveMyReportState(mine);
   }
 
   /** Official-source integration is a later phase: nothing to serve yet. */

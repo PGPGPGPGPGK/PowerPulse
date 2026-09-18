@@ -17,6 +17,7 @@ export function ReportOutageScreen({ onNavigate }: { onNavigate: (route: Route) 
     selectLocality,
     reasonOptions,
     submitReport,
+    requireLegalAcknowledgement,
   } = useOutages();
   const [changingLocation, setChangingLocation] = useState(false);
   const [street, setStreet] = useState('');
@@ -26,12 +27,15 @@ export function ReportOutageScreen({ onNavigate }: { onNavigate: (route: Route) 
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    const { incident } = submitReport({
-      type: 'outage',
-      street: street || undefined,
-      reasonCode: reasonCode || undefined,
+    // Nothing is written until the acknowledgement has been given.
+    requireLegalAcknowledgement(() => {
+      const { incident } = submitReport({
+        type: 'outage',
+        street: street || undefined,
+        reasonCode: reasonCode || undefined,
+      });
+      onNavigate({ name: 'confirmation', incidentId: incident?.id ?? null });
     });
-    onNavigate({ name: 'confirmation', incidentId: incident?.id ?? null });
   };
 
   return (

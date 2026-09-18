@@ -108,7 +108,17 @@ export interface CommunityReasonOption {
 
 // --------------------------------------------------------------- 2. DERIVED
 
-export type IncidentStatus = 'none' | 'possible' | 'confirmed' | 'restoring' | 'restored';
+/**
+ * `inactive` means nobody has confirmed the outage for a while. It is NOT a
+ * restoration: it says the community signal went quiet, nothing more.
+ */
+export type IncidentStatus =
+  | 'none'
+  | 'possible'
+  | 'confirmed'
+  | 'restoring'
+  | 'restored'
+  | 'inactive';
 
 /** Aggregated optional reasons. A community claim, not a verified cause. */
 export interface CommunityReason {
@@ -210,7 +220,7 @@ export interface AreaStatusView {
 
 export interface StatusPresentation {
   label: string;
-  tone: 'ok' | 'warn' | 'alert' | 'restoring';
+  tone: 'ok' | 'warn' | 'alert' | 'restoring' | 'stale';
 }
 
 /** A one-tap way to jump the prototype into a given demo state. */

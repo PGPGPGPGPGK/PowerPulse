@@ -41,8 +41,13 @@ export interface NewReportInput {
   reasonCode?: CommunityReasonCode;
 }
 
-/** What the current user has most recently told us about one incident. */
-export type MyReportState = 'none' | 'reported' | 'restored';
+/**
+ * What the current user has most recently told us about one incident.
+ *
+ * `due` means their own observation has gone stale and it is time to ask them
+ * whether the power is still out. It says nothing about the incident itself.
+ */
+export type MyReportState = 'none' | 'reported' | 'due' | 'restored';
 
 export interface SubmitResult {
   report: Report;

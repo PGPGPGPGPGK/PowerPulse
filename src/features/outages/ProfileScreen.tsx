@@ -1,6 +1,7 @@
 import type { Route } from '../../types/outage';
 import { useOutages } from './OutageContext';
 import { Card } from '../../components/ui';
+import { LegalLinkRows, legalHref } from '../../components/LegalLinks';
 
 export function ProfileScreen({ onNavigate }: { onNavigate: (route: Route) => void }) {
   const {
@@ -70,7 +71,22 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (route: Route) => vo
           Pilot testers: tell us what was unclear, what was missing, and whether the status matched
           reality.
         </p>
-        <p className="note">Feedback collection is not wired up in this prototype.</p>
+        <a className="btn btn--ghost btn--sm" href={legalHref('feedback')}>
+          Give feedback
+        </a>
+        <p className="note">
+          The feedback page describes what we would like to know. Submission is not connected yet,
+          so nothing is sent from that form.
+        </p>
+      </Card>
+
+      <Card title="Privacy &amp; Legal">
+        <LegalLinkRows />
+        <p className="note">
+          Reporting is for people aged 18 or older. Report locations are coarsened before they are
+          stored, and the intended retention period for report records is up to 30 days - automated
+          deletion is still being implemented.
+        </p>
       </Card>
 
       <Card title="About PowerPulse">

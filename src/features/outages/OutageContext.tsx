@@ -19,10 +19,16 @@ import type {
   SubmitResult,
 } from '../../services/outageRepository';
 import { mockOutageRepository } from '../../services/mockOutageRepository';
-import { incidentAtLocation, rankNearby } from './deriveIncidents';
+import { LIFECYCLE_TICK_MS, incidentAtLocation, rankNearby } from './deriveIncidents';
 import { coarsenForSharing } from './geo';
 import { toUserLocation, useUserLocation } from '../location/useUserLocation';
 import type { LocationPermission } from '../location/useUserLocation';
+import {
+  browserLegalStore,
+  gateReportAction,
+  hasAcceptedCurrentLegal,
+  writeAcceptance,
+} from '../legal/legal';
 
 /**
  * The only consumer of the repository.
@@ -76,6 +82,17 @@ interface OutageContextValue extends Snapshot {
   setNotificationsEnabled: (value: boolean) => void;
   /** The location is taken from `userLocation`, never passed in by a screen. */
   submitReport: (input: Omit<NewReportInput, 'location'>) => SubmitResult;
+  /** True once this browser has acknowledged the current legal version. */
+  legalAccepted: boolean;
+  /** Whether the acknowledgement is currently being asked for. */
+  legalPromptOpen: boolean;
+  /**
+   * Runs `action` if the current legal version has been acknowledged, and
+   * otherwise asks first. Every user-created observation goes through this.
+   */
+  requireLegalAcknowledgement: (action: () => void) => void;
+  acceptLegal: () => void;
+  cancelLegal: () => void;
   /** Adds a still-out or restored signal from where the user is. */
   respondToIncident: (incident: Incident, type: 'still_out' | 'restored') => void;
   demoScenarios: DemoScenario[];
@@ -102,6 +119,12 @@ export function OutageProvider({
   const [notificationsEnabled, setNotificationsEnabled] = useState(user.notificationsEnabled);
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(null);
 
+  // Acknowledgement is a local fact about this browser: never stored in
+  // Firestore, never tied to the anonymous UID.
+  const legalStore = browserLegalStore();
+  const [legalAccepted, setLegalAccepted] = useState(() => hasAcceptedCurrentLegal(legalStore));
+  const [pendingAction, setPendingAction] = useState<{ run: () => void } | null>(null);
+
   // Starts on a manually selected locality centre: no permission prompt on
   // startup, and nothing is presented as a device fix until one is granted.
   const { location, permission, requestDeviceLocation, setManualLocation } = useUserLocation(
@@ -110,6 +133,14 @@ export function OutageProvider({
 
   // Realtime sources push new reports in; the mock source never fires.
   useEffect(() => repository.subscribe(() => setSnapshot(readSnapshot(repository))), [repository]);
+
+  // Freshness is a function of time, so an app left open re-reads it on a slow
+  // tick: a reconfirmation prompt appears when it falls due, and an incident
+  // goes quiet after the active window, with no query and no write.
+  useEffect(() => {
+    const tick = setInterval(() => setSnapshot(readSnapshot(repository)), LIFECYCLE_TICK_MS);
+    return () => clearInterval(tick);
+  }, [repository]);
 
   const submitReport = (input: Omit<NewReportInput, 'location'>) => {
     // The precise device position stops here: only a grid-snapped approximate
@@ -122,8 +153,13 @@ export function OutageProvider({
     return result;
   };
 
+  const requireLegalAcknowledgement = (action: () => void) => {
+    gateReportAction(legalAccepted, action, (pending) => setPendingAction({ run: pending }));
+  };
+
+  // still_out and restored are observations too, so they pass the same gate.
   const respondToIncident = (_incident: Incident, type: 'still_out' | 'restored') => {
-    submitReport({ type });
+    requireLegalAcknowledgement(() => submitReport({ type }));
   };
 
   const setManualPoint = (point: GeoPoint) => setManualLocation(point);
@@ -170,6 +206,18 @@ export function OutageProvider({
     notificationsEnabled,
     setNotificationsEnabled,
     submitReport,
+    legalAccepted,
+    legalPromptOpen: pendingAction !== null,
+    requireLegalAcknowledgement,
+    acceptLegal: () => {
+      writeAcceptance(legalStore);
+      setLegalAccepted(true);
+      const pending = pendingAction;
+      setPendingAction(null);
+      pending?.run();
+    },
+    // Cancelling discards the pending action: nothing is submitted.
+    cancelLegal: () => setPendingAction(null),
     respondToIncident,
     demoScenarios: repository.listDemoScenarios(),
     activeScenarioId,

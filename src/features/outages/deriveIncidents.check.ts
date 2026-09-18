@@ -4,10 +4,29 @@
  */
 import assert from 'node:assert/strict';
 import type { Report } from '../../types/outage';
-import { deriveIncidents, isActive, rankNearby } from './deriveIncidents.ts';
+import {
+  ACTIVE_WINDOW_HOURS,
+  LIFECYCLE_TICK_MS,
+  RECONFIRM_AFTER_HOURS,
+  deriveIncidents,
+  deriveMyReportState,
+  isActive,
+  rankNearby,
+} from './deriveIncidents.ts';
 import { coarsenForSharing, distanceMeters } from './geo.ts';
 import { buildReportFields } from '../../services/reportDocument.ts';
 import { localityFor } from '../../data/areas.ts';
+import {
+  LEGAL_STORAGE_KEY,
+  LEGAL_VERSION,
+  acceptanceRecord,
+  gateReportAction,
+  hasAcceptedCurrentLegal,
+  legalPageUrl,
+  readAcceptance,
+  writeAcceptance,
+} from '../legal/legal.ts';
+import type { LegalStore } from '../legal/legal.ts';
 import {
   circleRing,
   describeIncident,
@@ -177,6 +196,104 @@ assert.equal(
   'reports older than the derivation window are not clustered at all',
 );
 
+// ------------------------------------------------------- incident lifecycle
+
+const hoursAgo = (h: number) => h * 60;
+
+// 15. A person is not prompted while their own observation is still fresh.
+assert.equal(
+  deriveMyReportState([report('outage', 'a', 17.3675, 78.531, hoursAgo(1))]),
+  'reported',
+  `no prompt before ${RECONFIRM_AFTER_HOURS} hours`,
+);
+assert.equal(deriveMyReportState([]), 'none');
+
+// 16. ...and is prompted once it has gone stale.
+assert.equal(
+  deriveMyReportState([report('outage', 'a', 17.3675, 78.531, hoursAgo(3))]),
+  'due',
+  `prompt after ${RECONFIRM_AFTER_HOURS} hours`,
+);
+
+// 17. Any still_out answer restarts that person's clock.
+assert.equal(
+  deriveMyReportState([
+    report('outage', 'a', 17.3675, 78.531, hoursAgo(5)),
+    report('still_out', 'a', 17.3675, 78.531, 10),
+  ]),
+  'reported',
+  'still_out resets the reconfirmation timer',
+);
+
+// 18. Saying the power is back retires them from the prompt for good.
+assert.equal(
+  deriveMyReportState([
+    report('outage', 'a', 17.3675, 78.531, hoursAgo(9)),
+    report('restored', 'a', 17.3675, 78.531, hoursAgo(8)),
+  ]),
+  'restored',
+  'a restored report removes the prompt even when it is old',
+);
+
+// 19. An incident with a recent confirmation stays active.
+const freshlyConfirmed = deriveIncidents(
+  [
+    report('outage', 'a', 17.3675, 78.531, hoursAgo(5)),
+    report('outage', 'b', 17.3676, 78.5311, hoursAgo(5)),
+    report('outage', 'c', 17.3677, 78.5312, hoursAgo(5)),
+    report('still_out', 'a', 17.3675, 78.531, 20),
+  ],
+  localityFor,
+)[0];
+assert.equal(freshlyConfirmed.status, 'confirmed');
+assert.equal(isActive(freshlyConfirmed), true);
+
+// 20. Without a fresh confirmation it stops being treated as active.
+const quiet = deriveIncidents(
+  [
+    report('outage', 'a', 17.3675, 78.531, hoursAgo(9)),
+    report('outage', 'b', 17.3676, 78.5311, hoursAgo(8)),
+    report('outage', 'c', 17.3677, 78.5312, hoursAgo(7)),
+  ],
+  localityFor,
+)[0];
+assert.equal(quiet.status, 'inactive', `no confirmation for ${ACTIVE_WINDOW_HOURS} hours`);
+assert.equal(isActive(quiet), false);
+
+// A still_out inside the window keeps the same reports active.
+const keptAlive = deriveIncidents(
+  [
+    report('outage', 'a', 17.3675, 78.531, hoursAgo(9)),
+    report('outage', 'b', 17.3676, 78.5311, hoursAgo(8)),
+    report('still_out', 'b', 17.3676, 78.5311, hoursAgo(1)),
+  ],
+  localityFor,
+)[0];
+assert.equal(isActive(keptAlive), true, 'a still_out inside the window keeps it active');
+
+// 21. Going quiet is NOT a restoration and must never be labelled as one.
+assert.notEqual(quiet.status, 'restored');
+assert.equal(quiet.restorationCount, 0);
+assert.equal(quiet.restoredAt, undefined, 'silence never produces a restoration time');
+
+// 22. Explicit restoration still works on its own terms, however old.
+const explicitlyRestored = deriveIncidents(
+  [
+    report('outage', 'a', 17.3675, 78.531, hoursAgo(9)),
+    report('outage', 'b', 17.3676, 78.5311, hoursAgo(8)),
+    report('restored', 'a', 17.3675, 78.531, hoursAgo(7)),
+    report('restored', 'b', 17.3676, 78.5311, hoursAgo(7)),
+  ],
+  localityFor,
+)[0];
+assert.equal(explicitlyRestored.status, 'restored', 'restoration outranks staleness');
+assert.ok(explicitlyRestored.restoredAt);
+assert.equal(isActive(explicitlyRestored), false);
+
+// ...and a fresh restoration is still distinguished from a stale silence.
+assert.equal(restored.status, 'restored');
+assert.notEqual(restored.status, quiet.status);
+
 // --------------------------------------------------------------- privacy
 
 // A precise device fix, as getCurrentPosition would give it.
@@ -308,5 +425,130 @@ const described = describeIncident(mapped, 350);
 assert.ok(described.includes('3 reporting'));
 assert.ok(described.includes('350 m away'));
 assert.ok(described.includes('clustered'));
+
+// 31. Time-dependent state is a pure function of the clock, which is what the
+// 60-second tick re-evaluates. The same reports are read at two moments.
+const standingReports = [
+  report('outage', 'a', 17.3675, 78.531, 30),
+  report('outage', 'b', 17.3676, 78.5311, 28),
+  report('outage', 'c', 17.3677, 78.5312, 26),
+];
+const nowMs = Date.now();
+
+const asSeenNow = deriveIncidents(standingReports, localityFor, nowMs)[0];
+assert.equal(asSeenNow.status, 'confirmed');
+assert.equal(isActive(asSeenNow), true);
+
+// The same data, read later, without anything new arriving.
+const asSeenLater = deriveIncidents(
+  standingReports,
+  localityFor,
+  nowMs + (ACTIVE_WINDOW_HOURS + 1) * 3_600_000,
+)[0];
+assert.equal(asSeenLater.status, 'inactive', 'the tick alone moves it to inactive');
+assert.equal(isActive(asSeenLater), false);
+assert.equal(asSeenLater.restoredAt, undefined, 'and still never claims restoration');
+
+// The same for one person's reconfirmation prompt.
+const myReport = [report('outage', 'a', 17.3675, 78.531, 5)];
+assert.equal(deriveMyReportState(myReport, nowMs), 'reported');
+assert.equal(
+  deriveMyReportState(myReport, nowMs + RECONFIRM_AFTER_HOURS * 3_600_000 + 1_000),
+  'due',
+  'the prompt falls due purely with the passage of time',
+);
+
+// The tick is slow on purpose: a minute, not a second.
+assert.equal(LIFECYCLE_TICK_MS, 60_000);
+
+// ------------------------------------------------------- legal gate
+
+/** In-memory stand-in for localStorage. */
+const fakeStore = (initial: Record<string, string> = {}): LegalStore & { data: Record<string, string> } => ({
+  data: { ...initial },
+  getItem(key) {
+    return this.data[key] ?? null;
+  },
+  setItem(key, value) {
+    this.data[key] = value;
+  },
+});
+
+// 23. Legal URLs are built from the base path, never root-absolute.
+assert.equal(legalPageUrl('privacy', '/PowerPulse/'), '/PowerPulse/privacy.html');
+assert.equal(legalPageUrl('terms', '/PowerPulse/'), '/PowerPulse/terms.html');
+assert.equal(legalPageUrl('storage', '/PowerPulse/'), '/PowerPulse/data-storage.html');
+assert.equal(legalPageUrl('feedback', '/PowerPulse/'), '/PowerPulse/feedback.html');
+// Local development, and a base that forgot its trailing slash.
+assert.equal(legalPageUrl('privacy', '/'), '/privacy.html');
+assert.equal(legalPageUrl('privacy', '/PowerPulse'), '/PowerPulse/privacy.html');
+assert.equal(legalPageUrl('privacy', '/my-fork/'), '/my-fork/privacy.html');
+
+// 24. The first reporting action is blocked until the acknowledgement is given.
+let submitted = 0;
+let captured: (() => void) | null = null;
+const prompt = (pending: () => void) => {
+  captured = pending;
+};
+
+gateReportAction(false, () => submitted++, prompt);
+assert.equal(submitted, 0, 'an unacknowledged action must not run');
+assert.ok(captured, 'the action is held pending instead');
+
+// 25. Accepting runs exactly the action that was held.
+(captured as unknown as () => void)();
+assert.equal(submitted, 1);
+
+// 26. Acceptance persists locally, in the documented shape and nothing more.
+const store = fakeStore();
+assert.equal(hasAcceptedCurrentLegal(store), false, 'a fresh browser has not accepted');
+writeAcceptance(store);
+assert.deepEqual(JSON.parse(store.data[LEGAL_STORAGE_KEY]), {
+  accepted: true,
+  legalVersion: LEGAL_VERSION,
+});
+assert.deepEqual(Object.keys(acceptanceRecord()).sort(), ['accepted', 'legalVersion']);
+
+// 27. Having accepted the current version, the user is not asked again.
+assert.equal(hasAcceptedCurrentLegal(store), true);
+let promptedAgain = false;
+gateReportAction(hasAcceptedCurrentLegal(store), () => submitted++, () => {
+  promptedAgain = true;
+});
+assert.equal(promptedAgain, false, 'no re-prompt for the accepted version');
+assert.equal(submitted, 2, 'the action ran straight away');
+
+// 28. A new legal version asks again.
+assert.equal(
+  hasAcceptedCurrentLegal(store, '2027-01-01'),
+  false,
+  'a newer legal version must be acknowledged again',
+);
+// Damaged or foreign values are treated as "not accepted", never as consent.
+assert.equal(hasAcceptedCurrentLegal(fakeStore({ [LEGAL_STORAGE_KEY]: 'not json' })), false);
+assert.equal(
+  hasAcceptedCurrentLegal(fakeStore({ [LEGAL_STORAGE_KEY]: '{"accepted":"yes"}' })),
+  false,
+);
+assert.equal(readAcceptance(undefined), null, 'no storage means no acceptance');
+
+// 29. Cancelling submits nothing.
+const before = submitted;
+gateReportAction(false, () => submitted++, () => {
+  /* the user closes the dialog: the pending action is simply dropped */
+});
+assert.equal(submitted, before, 'cancelling must not submit a report');
+
+// 30. Acknowledgement never reaches Firestore.
+const reportFields = buildReportFields('uid-1', { type: 'outage', location: PRECISE });
+const reportJson = JSON.stringify(reportFields);
+assert.equal(reportJson.includes('legal'), false, 'no legal field is persisted with a report');
+assert.equal(reportJson.includes(LEGAL_VERSION), false, 'no legal version is persisted');
+assert.equal(reportJson.includes('accepted'), false);
+assert.equal(
+  JSON.stringify(acceptanceRecord()).includes('uid'),
+  false,
+  'acceptance is not tied to an account identifier',
+);
 
 console.log('deriveIncidents: all checks passed');

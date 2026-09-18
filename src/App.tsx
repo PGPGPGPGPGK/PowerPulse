@@ -11,6 +11,9 @@ import { HistoryScreen } from './features/outages/HistoryScreen';
 import { ProfileScreen } from './features/outages/ProfileScreen';
 import { AppHeader } from './components/AppHeader';
 import { BottomNav } from './components/BottomNav';
+import { LegalFooter } from './components/LegalLinks';
+import { LegalGate } from './components/LegalGate';
+import { useOutages } from './features/outages/OutageContext';
 
 /** Prototype navigation: plain React state, no router dependency. */
 const titles: Record<Route['name'], { title: string; subtitle?: string }> = {
@@ -27,12 +30,21 @@ const isSecondary = (name: Route['name']) =>
   name === 'report' || name === 'confirmation' || name === 'incident';
 
 export default function App({ repository }: { repository?: OutageRepository }) {
-  const [route, setRoute] = useState<Route>({ name: 'home' });
-  const { title, subtitle } = titles[route.name];
-  const isLive = repository?.sourceKind === 'firebase';
-
   return (
     <OutageProvider repository={repository}>
+      <AppShell isLive={repository?.sourceKind === 'firebase'} />
+    </OutageProvider>
+  );
+}
+
+/** Inside the provider, so the legal gate can read and update it. */
+function AppShell({ isLive }: { isLive: boolean }) {
+  const [route, setRoute] = useState<Route>({ name: 'home' });
+  const { title, subtitle } = titles[route.name];
+  const { legalPromptOpen, acceptLegal, cancelLegal } = useOutages();
+
+  return (
+    <>
       <div className="app">
         <AppHeader
           title={title}
@@ -62,8 +74,12 @@ export default function App({ repository }: { repository?: OutageRepository }) {
           {route.name === 'profile' && <ProfileScreen onNavigate={setRoute} />}
         </main>
 
+        <LegalFooter />
+
         <BottomNav current={route.name} onNavigate={setRoute} />
       </div>
-    </OutageProvider>
+
+      {legalPromptOpen ? <LegalGate onAccept={acceptLegal} onCancel={cancelLegal} /> : null}
+    </>
   );
 }

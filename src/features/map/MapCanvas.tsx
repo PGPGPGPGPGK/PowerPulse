@@ -17,10 +17,19 @@ import { boundsFor, toIncidentAreas, toIncidentPoints } from './incidentLayers';
 
 /**
  * OpenFreeMap: OpenStreetMap-based vector tiles, no API key, no usage limit,
- * and explicitly permitted for production use. Overridable per deployment.
+ * and explicitly permitted for production use. `liberty` is the style its
+ * quick-start documents; `positron` resolves too and declares identical
+ * sources, glyphs and sprite. Overridable per deployment.
  */
-const DEFAULT_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+const DEFAULT_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const styleUrl = import.meta.env.VITE_MAP_STYLE_URL || DEFAULT_STYLE;
+
+/**
+ * How long to wait for the basemap to finish painting before treating it as
+ * unusable. Generous, because a cold cache on mobile data is slow - but finite,
+ * so a blank panel is never left sitting there with only the viewer's dot on it.
+ */
+const BASEMAP_TIMEOUT_MS = 15_000;
 
 /**
  * Neither the style nor its TileJSON declares an attribution, so MapLibre's
@@ -77,6 +86,7 @@ export function MapCanvas({
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
   const ready = useRef(false);
+  const basemapPainted = useRef(false);
 
   // Handlers are registered once on the map, so they read the latest callback
   // through this ref rather than being re-bound on every render.
@@ -107,14 +117,49 @@ export function MapCanvas({
       .setLngLat([viewerPoint.lng, viewerPoint.lat])
       .addTo(instance);
 
-    instance.on('error', (event: { error?: unknown }) => {
-      // A failed tile or style must not take the screen down.
-      console.error('PowerPulse: map error', event.error);
-      if (!ready.current) onError();
+    // The container can still be laying out when the map is created - most
+    // often in production, where the chunk's stylesheet arrives with the code.
+    // Without a re-measure the canvas keeps its initial size, which may be
+    // zero: the marker shows, the basemap never paints.
+    //
+    // ResizeObserver is the precise tool, but it is not assumed to exist: the
+    // deferred resizes below cover the same case everywhere, and MapLibre's own
+    // trackResize already follows window resizes.
+    let resizeObserver: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => instance.resize());
+      resizeObserver.observe(container.current);
+    }
+
+    const deferredResizes = [0, 250, 1_000].map((delay) =>
+      window.setTimeout(() => instance.resize(), delay),
+    );
+
+    // A style that never loads, or tiles that never arrive, must surface as
+    // "map unavailable" rather than as an empty panel.
+    const basemapTimeout = setTimeout(() => {
+      if (!basemapPainted.current) {
+        console.error('PowerPulse: basemap did not finish loading');
+        onError();
+      }
+    }, BASEMAP_TIMEOUT_MS);
+
+    instance.on('idle', () => {
+      basemapPainted.current = true;
+      clearTimeout(basemapTimeout);
+    });
+
+    instance.on('error', (event: { error?: unknown; sourceId?: string }) => {
+      console.error('PowerPulse: map error', event.sourceId ?? 'style', event.error);
+      // Before the first paint, any style or source failure means there is no
+      // usable basemap. Afterwards a single missing tile is survivable.
+      if (!basemapPainted.current) onError();
     });
 
     instance.on('load', () => {
       ready.current = true;
+      // The container may have gained its real size while the style loaded.
+      instance.resize();
 
       instance.addSource(AREAS, { type: 'geojson', data: toIncidentAreas(incidents) });
       instance.addSource(POINTS, { type: 'geojson', data: toIncidentPoints(incidents) });
@@ -181,9 +226,13 @@ export function MapCanvas({
     });
 
     return () => {
+      clearTimeout(basemapTimeout);
+      deferredResizes.forEach((timer) => clearTimeout(timer));
+      resizeObserver?.disconnect();
       instance.remove();
       map.current = null;
       ready.current = false;
+      basemapPainted.current = false;
     };
     // Initialised once; later prop changes are applied by the effects below.
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleHelp, Power, Wrench } from 'lucide-react';
+import { CheckCircle2, CircleHelp, CircleSlash, Power, Wrench } from 'lucide-react';
 import type { Incident, IncidentStatus } from '../types/outage';
 import { statusPresentation, timeAgo } from '../features/outages/format';
 import { StatusPill } from './ui';
@@ -9,6 +9,7 @@ const icons: Record<IncidentStatus, typeof Power> = {
   confirmed: Power,
   restoring: Wrench,
   restored: CheckCircle2,
+  inactive: CircleSlash,
 };
 
 /** Never claims a whole neighbourhood is affected - only "near you". */
@@ -21,6 +22,8 @@ const headline = (status: IncidentStatus): string => {
       return 'Power may be coming back near you';
     case 'restored':
       return 'Power reported back near you';
+    case 'inactive':
+      return 'No recent confirmations near you';
     default:
       return 'No outage reported near you';
   }

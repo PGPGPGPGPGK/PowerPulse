@@ -38,4 +38,6 @@ export const statusPresentation: Record<IncidentStatus, StatusPresentation> = {
   confirmed: { label: 'Community-confirmed outage', tone: 'alert' },
   restoring: { label: 'Possible restoration', tone: 'restoring' },
   restored: { label: 'Power reported back', tone: 'ok' },
+  // Not a restoration: the reports simply stopped coming.
+  inactive: { label: 'No longer active', tone: 'stale' },
 };

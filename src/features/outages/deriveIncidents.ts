@@ -1,4 +1,11 @@
-import type { CommunityReason, GeoPoint, Incident, NearbyIncident, Report } from '../../types/outage';
+import type {
+  CommunityReason,
+  GeoPoint,
+  Incident,
+  NearbyIncident,
+  Report,
+} from '../../types/outage';
+import type { MyReportState } from '../../services/outageRepository';
 import { reasonLabel } from '../../data/reasons.ts';
 import { centroid, distanceMeters } from './geo.ts';
 
@@ -20,8 +27,22 @@ export const MIN_RADIUS_M = 120;
 export const CONFIRM_THRESHOLD = 3;
 /** Distinct restoration reporters needed before an incident reads as restored. */
 export const RESTORE_THRESHOLD = 2;
-/** Reports older than this stop driving the live status. */
+/**
+ * How long an incident keeps being shown as active without a fresh outage or
+ * still-out observation. Past this it goes quiet - which is not a restoration.
+ */
 export const ACTIVE_WINDOW_HOURS = 6;
+/**
+ * How long one person's own observation stays fresh before they are asked to
+ * reconfirm. Their answer restarts the clock.
+ */
+export const RECONFIRM_AFTER_HOURS = 2;
+/**
+ * How often an open app re-evaluates time-dependent state, so a reconfirmation
+ * prompt appears and an incident goes quiet without anyone touching the screen.
+ * Purely local arithmetic: no query, no write, no billing.
+ */
+export const LIFECYCLE_TICK_MS = 60_000;
 /**
  * Hard bound on how far back clustering ever looks. Without it the cost of
  * derivation would grow with the whole history of the database.
@@ -37,7 +58,9 @@ export type LocalityLabeller = (point: GeoPoint) => { id: string; label: string 
 
 const distinctUsers = (reports: Report[]) => new Set(reports.map((r) => r.userId)).size;
 
-function buildIncident(cluster: Report[], labelFor: LocalityLabeller): Incident {
+const hoursSince = (iso: string, now: number) => (now - new Date(iso).getTime()) / 3_600_000;
+
+function buildIncident(cluster: Report[], labelFor: LocalityLabeller, now: number): Incident {
   const sorted = [...cluster].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const outages = sorted.filter((r) => r.type === 'outage');
   const stillOut = sorted.filter((r) => r.type === 'still_out');
@@ -50,9 +73,20 @@ function buildIncident(cluster: Report[], labelFor: LocalityLabeller): Incident 
   const reporterCount = distinctUsers(outages);
   const restorationCount = distinctUsers(restorations);
 
+  // Every piece of evidence that the power is still out, oldest first.
+  const outageSignals = [...outages, ...stillOut].sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt),
+  );
+  const lastSignal = outageSignals[outageSignals.length - 1];
+  const wentQuiet = !lastSignal || hoursSince(lastSignal.createdAt, now) > ACTIVE_WINDOW_HOURS;
+
   let status: Incident['status'];
   if (restorationCount >= RESTORE_THRESHOLD && restorationCount * 2 >= reporterCount) {
+    // Explicit restoration always wins: people said the power came back.
     status = 'restored';
+  } else if (wentQuiet) {
+    // Nobody has confirmed it recently. That is silence, not restoration.
+    status = 'inactive';
   } else if (restorationCount > 0) {
     status = 'restoring';
   } else if (reporterCount >= CONFIRM_THRESHOLD) {
@@ -75,7 +109,6 @@ function buildIncident(cluster: Report[], labelFor: LocalityLabeller): Incident 
     }))
     .sort((a, b) => b.reportedBy - a.reportedBy);
 
-  const lastConfirmed = [...outages, ...stillOut].pop() ?? sorted[0];
   const locality = labelFor(center);
 
   return {
@@ -89,7 +122,7 @@ function buildIncident(cluster: Report[], labelFor: LocalityLabeller): Incident 
     confirmationCount: stillOut.length,
     restorationCount,
     firstReportedAt: (outages[0] ?? sorted[0]).createdAt,
-    lastConfirmedAt: lastConfirmed.createdAt,
+    lastConfirmedAt: (lastSignal ?? sorted[0]).createdAt,
     restoredAt: status === 'restored' ? restorations[restorations.length - 1].createdAt : undefined,
     reasons,
     streets: [...new Set(sorted.map((r) => r.street).filter(Boolean) as string[])],
@@ -123,15 +156,35 @@ export function deriveIncidents(
   }
 
   return clusters
-    .map((cluster) => buildIncident(cluster, labelFor))
+    .map((cluster) => buildIncident(cluster, labelFor, now))
     .sort((a, b) => b.lastConfirmedAt.localeCompare(a.lastConfirmedAt));
 }
 
-/** Incidents still worth showing as live status. */
-export function isActive(incident: Incident, now = Date.now()): boolean {
-  if (incident.status === 'restored') return false;
-  const age = now - new Date(incident.lastConfirmedAt).getTime();
-  return age <= ACTIVE_WINDOW_HOURS * 3_600_000;
+/**
+ * Incidents still worth showing as live status: neither reported restored nor
+ * gone quiet. Staleness is already decided in the derivation, so this stays a
+ * simple read of the status.
+ */
+export function isActive(incident: Incident): boolean {
+  return incident.status !== 'restored' && incident.status !== 'inactive';
+}
+
+/**
+ * Whether this person's own contribution to an incident has gone stale.
+ *
+ * Takes that user's own reports for the incident, newest last. Anything they
+ * say restarts their two-hour clock; saying the power is back retires them
+ * from the prompt entirely.
+ */
+export function deriveMyReportState(
+  myReports: Report[],
+  now = Date.now(),
+): MyReportState {
+  const ordered = [...myReports].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const latest = ordered[ordered.length - 1];
+  if (!latest) return 'none';
+  if (latest.type === 'restored') return 'restored';
+  return hoursSince(latest.createdAt, now) >= RECONFIRM_AFTER_HOURS ? 'due' : 'reported';
 }
 
 /** Nearest first, within NEARBY_RADIUS_M of the given point. */

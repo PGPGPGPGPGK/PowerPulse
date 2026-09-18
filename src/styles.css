@@ -226,6 +226,11 @@ p {
   color: var(--restoring);
 }
 
+.pill--stale {
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  color: var(--muted);
+}
+
 .pill--demo {
   background: color-mix(in srgb, var(--demo) 18%, transparent);
   color: var(--demo);
@@ -297,6 +302,11 @@ p {
   color: var(--restoring);
 }
 
+.statusCard--stale .statusCard__icon {
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  color: var(--muted);
+}
+
 /* user's own reporting state */
 .myState {
   display: flex;
@@ -341,6 +351,35 @@ p {
 .locationBar__controls .field {
   flex: 1;
   min-width: 160px;
+}
+
+/* the two-hour reconfirmation prompt */
+.reconfirm {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line));
+  border-radius: var(--radius);
+}
+
+.reconfirm__question {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 1.02rem;
+  font-weight: 600;
+}
+
+.reconfirm .actions__row {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.reconfirm .actions__row .btn {
+  flex: 1;
 }
 
 /* compact "view details" row */
@@ -422,6 +461,10 @@ p {
 
 .dot--restoring {
   background: var(--restoring);
+}
+
+.dot--stale {
+  background: var(--muted);
 }
 
 /* ------------------------------------------------------------------- data */
@@ -757,6 +800,93 @@ p {
 .scenario__description {
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+/* --------------------------------------------------------- legal and gate */
+
+.legalRows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legalRows a {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  font-size: 0.92rem;
+  text-decoration: none;
+}
+
+.legalRows li:last-child a {
+  border-bottom: 0;
+}
+
+.legalRows a:hover,
+.legalRows a:focus-visible {
+  color: var(--brand);
+}
+
+.legalFooter {
+  padding: 4px 16px 16px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.legalFooter a {
+  color: var(--muted);
+}
+
+.legalGate {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: end center;
+  padding: 16px;
+  background: rgb(15 23 42 / 55%);
+}
+
+.legalGate__card {
+  width: 100%;
+  max-width: 460px;
+  margin-bottom: max(16px, env(safe-area-inset-bottom));
+  padding: 20px;
+  background: var(--surface);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 35%);
+}
+
+.legalGate__card h2 {
+  margin-bottom: 10px;
+  font-size: 1.2rem;
+}
+
+.legalGate__card p {
+  margin-bottom: 10px;
+  font-size: 0.92rem;
+}
+
+.legalGate__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@media (min-width: 600px) {
+  .legalGate {
+    place-items: center;
+  }
+
+  .legalGate__card {
+    margin-bottom: 0;
+  }
 }
 
 /* ------------------------------------------------------------ bottom nav */

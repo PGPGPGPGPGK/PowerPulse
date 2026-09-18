@@ -170,8 +170,11 @@ rather than values.
 Real interactive map via MapLibre GL JS, loaded only when the map screen opens
 so it never delays the home screen. Tiles come from
 [OpenFreeMap](https://openfreemap.org): OpenStreetMap-derived vector tiles with
-no API key and no usage limit. Set `VITE_MAP_STYLE_URL` to use a different
-MapLibre style.
+no API key and no usage limit. The default style is `liberty`, the one
+OpenFreeMap's quick-start documents; set `VITE_MAP_STYLE_URL` to use another.
+
+If the style, its tiles, or the MapLibre chunk itself fail, the screen says so
+and falls back to the text list - it never leaves a blank panel.
 
 The map draws incident centres, their approximate cluster extent and aggregate
 counts - never individual report positions. The viewer's own marker is rendered
@@ -189,6 +192,26 @@ information and temporary IP logging may be enabled during security incidents.
 
 No PowerPulse report data is sent to the tile provider: tile requests carry only
 the map area being viewed.
+
+## Incident lifecycle
+
+An outage does not stay on the screen forever just because nobody said it
+ended. Two pilot timers, both in
+`src/features/outages/deriveIncidents.ts`:
+
+- **2 hours** (`RECONFIRM_AFTER_HOURS`) — after this, the people who reported
+  are asked in-app whether the power is still out. Any answer restarts their
+  own timer; "power is back" retires them from the prompt.
+- **6 hours** (`ACTIVE_WINDOW_HOURS`) — with no outage or still-out
+  confirmation in that time an incident stops being shown as active and reads
+  **"No longer active"**. That is silence, not restoration: it never counts as
+  restored, and it never produces a restoration time.
+
+Explicit restoration is separate and unchanged: enough distinct "power is back"
+reports still produce **restored**, whatever the timers say.
+
+All of this is computed on the client from report timestamps. No scheduled
+jobs, no Cloud Functions, no notifications.
 
 ## Current status
 

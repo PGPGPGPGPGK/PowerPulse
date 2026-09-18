@@ -24,7 +24,7 @@ import {
   officialSources,
   seedReports,
 } from '../data/mockData';
-import { deriveIncidents, isActive } from '../features/outages/deriveIncidents';
+import { deriveIncidents, deriveMyReportState, isActive } from '../features/outages/deriveIncidents';
 import { coarsenForSharing, distanceMeters } from '../features/outages/geo';
 
 /**
@@ -33,12 +33,18 @@ import { coarsenForSharing, distanceMeters } from '../features/outages/geo';
  * This is the file Firebase replaces. It is the only place that imports
  * `data/mockData`.
  */
+/**
+ * Derived incidents are re-computed at least this often, so an incident that
+ * quietly ages past the active window updates without new reports arriving.
+ */
+const CACHE_TTL_MS = 30_000;
+
 class MockOutageRepository implements OutageRepository {
   readonly sourceKind = 'mock' as const;
 
   private reports: Report[] = [...seedReports];
 
-  private cache: { source: Report[]; incidents: Incident[] } | null = null;
+  private cache: { source: Report[]; derivedAt: number; incidents: Incident[] } | null = null;
 
   private nextId = 0;
 
@@ -64,9 +70,12 @@ class MockOutageRepository implements OutageRepository {
   }
 
   listIncidents(): Incident[] {
-    if (this.cache?.source !== this.reports) {
+    // Statuses age, so the cache expires on time as well as on new reports.
+    const stale = !this.cache || Date.now() - this.cache.derivedAt > CACHE_TTL_MS;
+    if (stale || this.cache?.source !== this.reports) {
       this.cache = {
         source: this.reports,
+        derivedAt: Date.now(),
         incidents: deriveIncidents(this.reports, localityFor),
       };
     }
@@ -86,17 +95,12 @@ class MockOutageRepository implements OutageRepository {
 
   getMyReportState(incident: Incident): MyReportState {
     // Same predicate submitReport uses to attach a report to a cluster.
-    const mine = this.reports
-      .filter(
-        (report) =>
-          report.userId === demoUser.id &&
-          distanceMeters(incident.publicCenter, report.location) <= incident.radiusMeters,
-      )
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-
-    const latest = mine[mine.length - 1];
-    if (!latest) return 'none';
-    return latest.type === 'restored' ? 'restored' : 'reported';
+    const mine = this.reports.filter(
+      (report) =>
+        report.userId === demoUser.id &&
+        distanceMeters(incident.publicCenter, report.location) <= incident.radiusMeters,
+    );
+    return deriveMyReportState(mine);
   }
 
   listOfficialEvents(localityId?: string): OfficialEvent[] {
