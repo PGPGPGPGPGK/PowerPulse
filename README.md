@@ -45,14 +45,32 @@ PowerPulse is **not an official utility outage source**. All incident informatio
 
 ## Repository structure
 
-- `src/components` — reusable UI
-- `src/features/outages` — outage/reporting domain
-- `src/data` — repositories and seed data
-- `src/types` — shared domain types
+- `src/components` — reusable UI (header, nav, status/official/community cards, map)
+- `src/features/outages` — outage domain: screens, incident derivation, context
+- `src/services` — repository boundary (`outageRepository` interface + mock implementation)
+- `src/data` — demo data and static area list, reached only through the repository
+- `src/types/outage.ts` — raw input, derived, official and display models
 - `docs/PRD.md` — product requirements
 - `docs/DATA_MODEL.md` — Firestore-oriented schema
 - `docs/ANALYTICS.md` — pilot instrumentation
 
+## Running locally
+
+```bash
+npm install
+npm run dev      # http://localhost:5173
+npm run build    # typecheck + production build
+npm run lint
+npm run check    # self-check for the incident derivation rules
+```
+
 ## Current status
 
-Foundation / MVP implementation in progress.
+Clickable frontend prototype running on **demo data only**. No Firebase, no
+authentication, no geolocation, no notifications, no official or government
+source is connected. Every simulated outage and official entry is labelled as
+demo data in the UI.
+
+Demo states (clear, possible, community-confirmed, possible restoration,
+restored, scheduled official information, official + community reports) can be
+switched from **Profile → Demo states**.
