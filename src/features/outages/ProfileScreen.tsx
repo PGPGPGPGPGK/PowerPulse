@@ -56,6 +56,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (route: Route) => vo
           </li>
           <li>Accuracy readings from your device are shown to you only, and are never stored.</li>
           <li>Map circles show where reports cluster, not who reported.</li>
+          <li>
+            The map loads its tiles from OpenFreeMap, so opening it makes requests to that service.
+            Its privacy policy states IP addresses are not kept in regular server logs, though
+            infrastructure providers may process request information. No report data is sent there.
+          </li>
           <li>This prototype stores everything in your browser session only.</li>
         </ul>
       </Card>

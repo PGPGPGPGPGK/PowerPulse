@@ -55,7 +55,9 @@ export default function App({ repository }: { repository?: OutageRepository }) {
           {route.name === 'incident' && (
             <IncidentDetailScreen incidentId={route.incidentId} onNavigate={setRoute} />
           )}
-          {route.name === 'map' && <MapScreen onNavigate={setRoute} />}
+          {route.name === 'map' && (
+            <MapScreen focusIncidentId={route.focusIncidentId} onNavigate={setRoute} />
+          )}
           {route.name === 'history' && <HistoryScreen onNavigate={setRoute} />}
           {route.name === 'profile' && <ProfileScreen onNavigate={setRoute} />}
         </main>

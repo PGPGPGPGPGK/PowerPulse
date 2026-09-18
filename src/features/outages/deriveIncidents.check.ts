@@ -8,6 +8,12 @@ import { deriveIncidents, isActive, rankNearby } from './deriveIncidents.ts';
 import { coarsenForSharing, distanceMeters } from './geo.ts';
 import { buildReportFields } from '../../services/reportDocument.ts';
 import { localityFor } from '../../data/areas.ts';
+import {
+  circleRing,
+  describeIncident,
+  toIncidentAreas,
+  toIncidentPoints,
+} from '../map/incidentLayers.ts';
 
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 
@@ -244,5 +250,63 @@ const outside = deriveIncidents(
   localityFor,
 );
 assert.equal(outside.length, 2, 'distant reports stay separate after coarsening');
+
+// ------------------------------------------------------------- map layers
+
+// Build an incident out of several reports, so its centroid is distinct from
+// every individual report position.
+const mapped = deriveIncidents(
+  [
+    report('outage', 'a', 17.3675, 78.531, 20),
+    report('outage', 'b', 17.3679, 78.5314, 18),
+    report('outage', 'c', 17.3677, 78.5312, 16),
+  ],
+  localityFor,
+)[0];
+
+// 11. Only the public centre and radius reach the map.
+const points = toIncidentPoints([mapped]);
+assert.equal(points.features.length, 1);
+assert.deepEqual(points.features[0].geometry.coordinates, [
+  mapped.publicCenter.lng,
+  mapped.publicCenter.lat,
+]);
+assert.deepEqual(
+  Object.keys(points.features[0].properties).sort(),
+  ['id', 'localityLabel', 'radiusMeters', 'reporterCount', 'status'],
+  'map features carry aggregates only',
+);
+
+// 12. No raw report coordinate is present anywhere in the map payload.
+const payload = JSON.stringify([points, toIncidentAreas([mapped])]);
+for (const raw of ['17.3675,', '78.5314', '17.3679']) {
+  assert.equal(payload.includes(raw), false, `raw report coordinate ${raw} must not reach the map`);
+}
+assert.equal(payload.includes('location'), false, 'no report location field reaches the map');
+assert.equal(payload.includes('userId'), false, 'no reporter identity reaches the map');
+
+// 13. The drawn area uses the incident's own radius, on the ground.
+const areas = toIncidentAreas([mapped]);
+const ring = areas.features[0].geometry.coordinates[0];
+assert.equal(ring.length, 49, 'closed ring of 48 segments');
+assert.deepEqual(ring[0], ring[ring.length - 1], 'the ring is closed');
+for (const [lng, lat] of ring) {
+  const spread = distanceMeters(mapped.publicCenter, { lat, lng });
+  assert.ok(
+    Math.abs(spread - mapped.radiusMeters) < 2,
+    'every vertex sits on the incident radius',
+  );
+}
+assert.equal(areas.features[0].properties.radiusMeters, mapped.radiusMeters);
+
+// A circle of a known size comes out the right size.
+const ring500 = circleRing({ lat: 17.4, lng: 78.5 }, 500);
+assert.ok(Math.abs(distanceMeters({ lat: 17.4, lng: 78.5 }, { lat: ring500[0][1], lng: ring500[0][0] }) - 500) < 2);
+
+// 14. The text alternative states the cluster meaning, not coverage.
+const described = describeIncident(mapped, 350);
+assert.ok(described.includes('3 reporting'));
+assert.ok(described.includes('350 m away'));
+assert.ok(described.includes('clustered'));
 
 console.log('deriveIncidents: all checks passed');

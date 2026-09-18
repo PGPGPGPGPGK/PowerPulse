@@ -95,6 +95,31 @@ signed-in client, which is exactly why nothing precise is written into them.
 Hosting stays on GitHub Pages; the Firebase config is build-time configuration,
 so a Pages build needs the same variables supplied at build time.
 
+## Map
+
+Real interactive map via MapLibre GL JS, loaded only when the map screen opens
+so it never delays the home screen. Tiles come from
+[OpenFreeMap](https://openfreemap.org): OpenStreetMap-derived vector tiles with
+no API key and no usage limit. Set `VITE_MAP_STYLE_URL` to use a different
+MapLibre style.
+
+The map draws incident centres, their approximate cluster extent and aggregate
+counts - never individual report positions. The viewer's own marker is rendered
+in that browser alone. Attribution to OpenStreetMap contributors is supplied
+explicitly, since the style does not declare it. If the map or its tiles fail to
+load, the incident list below it still works.
+
+### Third-party requests
+
+The interactive map loads map resources from OpenFreeMap and its CDN. This
+creates network requests to that third-party service. OpenFreeMap's published
+privacy policy states that IP addresses are not stored in its regular server
+logs, although infrastructure providers such as Cloudflare may process request
+information and temporary IP logging may be enabled during security incidents.
+
+No PowerPulse report data is sent to the tile provider: tile requests carry only
+the map area being viewed.
+
 ## Current status
 
 Clickable frontend prototype running on **demo data only**. No Firebase, no

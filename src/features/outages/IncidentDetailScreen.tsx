@@ -1,3 +1,4 @@
+import { Map as MapIcon } from 'lucide-react';
 import type { Route } from '../../types/outage';
 import { useOutages } from './OutageContext';
 import { CommunityStatusCard } from '../../components/CommunityStatusCard';
@@ -54,6 +55,14 @@ export function IncidentDetailScreen({
       <CommunityStatusCard incident={incident} localityLabel={incident.localityLabel} />
 
       <OfficialInfoCard events={areaOfficialEvents} getSource={getOfficialSource} />
+
+      <button
+        type="button"
+        className="btn btn--ghost"
+        onClick={() => onNavigate({ name: 'map', focusIncidentId: incident.id })}
+      >
+        <MapIcon size={18} aria-hidden="true" /> Show this area on the map
+      </button>
 
       <ReportActions
         myState={getMyReportState(incident)}

@@ -675,147 +675,52 @@ p {
   box-shadow: var(--shadow);
 }
 
-.mapSvg {
-  display: block;
+.mapCanvas {
   width: 100%;
-  height: auto;
+  height: 58vh;
+  min-height: 320px;
+  max-height: 520px;
   border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-alt);
+  touch-action: pan-x pan-y;
 }
 
-.map__bg {
-  fill: var(--surface-alt);
-}
-
-.map__grid line {
-  stroke: var(--line);
-  stroke-width: 1;
-}
-
-.map__area circle {
-  fill: var(--muted);
-  opacity: 0.5;
-}
-
-.map__area text {
-  fill: var(--muted);
-  font-size: 22px;
-}
-
-.map__official circle {
-  fill: color-mix(in srgb, var(--official) 12%, transparent);
-  stroke: var(--official);
-  stroke-width: 3;
-  stroke-dasharray: 12 8;
-}
-
-.map__official text {
-  fill: var(--official);
-  font-size: 20px;
-  text-anchor: middle;
-}
-
-.map__incident {
-  cursor: pointer;
-}
-
-.map__incident text {
-  fill: var(--surface);
-  font-size: 26px;
-  font-weight: 700;
-}
-
-.map__incident circle {
-  stroke-width: 3;
-}
-
-.map__incident--possible circle {
-  fill: color-mix(in srgb, var(--warn) 35%, transparent);
-  stroke: var(--warn);
-}
-
-.map__incident--confirmed circle {
-  fill: color-mix(in srgb, var(--alert) 40%, transparent);
-  stroke: var(--alert);
-}
-
-.map__incident--restoring circle {
-  fill: color-mix(in srgb, var(--restoring) 32%, transparent);
-  stroke: var(--restoring);
-}
-
-.map__incident--restored circle {
-  fill: color-mix(in srgb, var(--ok) 28%, transparent);
-  stroke: var(--ok);
-}
-
-.map__incident.is-selected circle {
-  stroke-width: 6;
-}
-
-.map__you circle {
-  fill: var(--brand);
-  stroke: var(--surface);
-  stroke-width: 5;
-}
-
-.map__you .map__you-halo {
-  fill: color-mix(in srgb, var(--brand) 25%, transparent);
-  stroke: none;
-}
-
-.map__you text {
-  fill: var(--brand);
-  font-size: 24px;
-  font-weight: 700;
-  text-anchor: middle;
-}
-
-.mapLegend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
+.mapCanvas--loading {
+  display: grid;
+  place-items: center;
+  margin: 0;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.85rem;
 }
 
-.mapLegend li {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.swatch {
-  width: 12px;
-  height: 12px;
+/* The viewer's own position. Rendered in this browser only. */
+.mapViewerMarker {
+  width: 18px;
+  height: 18px;
+  border: 3px solid #fff;
   border-radius: 50%;
+  background: #1d4ed8;
+  box-shadow:
+    0 0 0 8px rgb(29 78 216 / 22%),
+    0 1px 4px rgb(15 23 42 / 45%);
 }
 
-.swatch--possible {
-  background: var(--warn);
+/* MapLibre's own controls sit on a light basemap in both themes. */
+.maplibregl-ctrl-attrib {
+  font-size: 11px;
 }
 
-.swatch--confirmed {
-  background: var(--alert);
-}
-
-.swatch--restoring {
-  background: var(--restoring);
-}
-
-.swatch--restored {
-  background: var(--ok);
-}
-
-.swatch--official {
-  background: transparent;
-  border: 2px dashed var(--official);
-}
-
-.swatch--you {
-  background: var(--brand);
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 /* -------------------------------------------------------------- scenarios */

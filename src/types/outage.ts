@@ -193,7 +193,7 @@ export type Route =
   | { name: 'home' }
   | { name: 'report' }
   | { name: 'confirmation'; incidentId: string | null }
-  | { name: 'map' }
+  | { name: 'map'; focusIncidentId?: string }
   | { name: 'incident'; incidentId: string }
   | { name: 'history' }
   | { name: 'profile' };
