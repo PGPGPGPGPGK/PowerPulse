@@ -27,6 +27,16 @@ import {
   writeAcceptance,
 } from '../legal/legal.ts';
 import type { LegalStore } from '../legal/legal.ts';
+import { readHintState as readHintStateFor } from '../install/installHint.ts';
+import {
+  DISMISS_DAYS,
+  INSTALL_HINT_KEY,
+  chooseInstallHint,
+  isHintSuppressed,
+  isIosLike,
+  isStandalone,
+  recordDismissal,
+} from '../install/installHint.ts';
 import {
   circleRing,
   describeIncident,
@@ -550,5 +560,89 @@ assert.equal(
   false,
   'acceptance is not tied to an account identifier',
 );
+
+// ------------------------------------------------------ install suggestion
+
+// 32. An installed app is never nagged, however the platform reports it.
+assert.equal(isStandalone(true, undefined), true, 'display-mode: standalone');
+assert.equal(isStandalone(false, true), true, 'iOS navigator.standalone');
+assert.equal(isStandalone(false, false), false);
+assert.equal(
+  chooseInstallHint({ standalone: true, suppressed: false, canPrompt: true, iosLike: false }),
+  'none',
+  'no suggestion once installed',
+);
+
+// 33. Chromium gets the real prompt, but only once the browser offers it.
+assert.equal(
+  chooseInstallHint({ standalone: false, suppressed: false, canPrompt: true, iosLike: false }),
+  'prompt',
+);
+assert.equal(
+  chooseInstallHint({ standalone: false, suppressed: false, canPrompt: false, iosLike: false }),
+  'none',
+  'never suggest where the browser has not said it is installable',
+);
+
+// 34. iOS gets instructions, because nothing else is possible there.
+assert.equal(
+  chooseInstallHint({ standalone: false, suppressed: false, canPrompt: false, iosLike: true }),
+  'ios-instructions',
+);
+assert.equal(isIosLike('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari'), true);
+assert.equal(isIosLike('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari', 5), true, 'iPadOS');
+assert.equal(isIosLike('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari', 0), false, 'a Mac');
+assert.equal(isIosLike('Mozilla/5.0 (Linux; Android 14) Chrome/120'), false);
+
+// 35. "Not now" is respected for a week, then the suggestion may return.
+const hintStore = fakeStore();
+const dismissedAt = Date.now();
+assert.equal(isHintSuppressed(hintStore, dismissedAt), false, 'nothing dismissed yet');
+
+recordDismissal(hintStore, dismissedAt);
+assert.deepEqual(Object.keys(JSON.parse(hintStore.data[INSTALL_HINT_KEY])), ['dismissedAt']);
+assert.equal(isHintSuppressed(hintStore, dismissedAt + 60_000), true, 'suppressed right after');
+assert.equal(
+  isHintSuppressed(hintStore, dismissedAt + (DISMISS_DAYS - 1) * 24 * 3_600_000),
+  true,
+  'still suppressed a day before the window ends',
+);
+assert.equal(
+  isHintSuppressed(hintStore, dismissedAt + (DISMISS_DAYS + 1) * 24 * 3_600_000),
+  false,
+  `may return after ${DISMISS_DAYS} days`,
+);
+assert.equal(
+  chooseInstallHint({ standalone: false, suppressed: true, canPrompt: true, iosLike: false }),
+  'none',
+  'a dismissal beats an available prompt',
+);
+
+// 36. Installation is never persisted: a browser cannot see an uninstall, so a
+// stored flag would silence the suggestion forever. Runtime detection only.
+assert.equal(
+  hintStore.data[INSTALL_HINT_KEY].includes('installed'),
+  false,
+  'no permanent installed flag is written',
+);
+assert.deepEqual(Object.keys(readHintStateFor(hintStore)), ['dismissedAt']);
+// Someone who installs and later uninstalls becomes eligible again, because
+// only the dismissal window is remembered.
+assert.equal(isHintSuppressed(hintStore, dismissedAt + 400 * 24 * 3_600_000), false);
+// A stale flag left by an older build is ignored rather than obeyed.
+const legacyStore = fakeStore({ [INSTALL_HINT_KEY]: '{"installed":true}' });
+assert.equal(isHintSuppressed(legacyStore), false, 'a legacy installed flag is ignored');
+assert.equal(
+  chooseInstallHint({ standalone: false, suppressed: false, canPrompt: true, iosLike: false }),
+  'prompt',
+);
+
+// 37. Install state is local only: nothing identifying, nothing sent anywhere.
+const hintJson = hintStore.data[INSTALL_HINT_KEY];
+assert.deepEqual(Object.keys(JSON.parse(hintJson)).sort(), ['dismissedAt']);
+for (const forbidden of ['userId', 'uid', 'email', 'location', 'lat']) {
+  assert.equal(hintJson.includes(forbidden), false, `install state must not contain ${forbidden}`);
+}
+assert.equal(isHintSuppressed(undefined), false, 'no storage means the card may still be shown');
 
 console.log('deriveIncidents: all checks passed');

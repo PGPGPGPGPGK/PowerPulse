@@ -2,6 +2,7 @@ import type { Route } from '../../types/outage';
 import { useOutages } from './OutageContext';
 import { Card } from '../../components/ui';
 import { LegalLinkRows, legalHref } from '../../components/LegalLinks';
+import { InstallCard } from '../../components/InstallCard';
 
 export function ProfileScreen({ onNavigate }: { onNavigate: (route: Route) => void }) {
   const {
@@ -18,6 +19,8 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (route: Route) => vo
 
   return (
     <div className="screen">
+      <InstallCard />
+
       <Card title="Your areas">
         <ul className="checkList">
           {areas.map((area) => (

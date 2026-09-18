@@ -193,6 +193,47 @@ information and temporary IP logging may be enabled during security incidents.
 No PowerPulse report data is sent to the tile provider: tile requests carry only
 the map area being viewed.
 
+## Install (add to home screen)
+
+PowerPulse is installable as a PWA: `public/manifest.webmanifest`, the icons in
+`public/icons/`, and a minimal static-shell service worker in `public/sw.js`.
+
+**No website can add itself to a home screen.** The browser decides, and the
+final step is always the user's:
+
+- **Android / Chromium** — the browser fires `beforeinstallprompt` when it
+  considers the app installable. PowerPulse holds that event (suppressing the
+  mini-infobar) and shows a small card instead. Only a tap on *Add to Home
+  Screen* opens the browser's own dialog.
+- **iPhone / iPad** — `beforeinstallprompt` does not exist. The same card
+  explains the manual route: Share → Add to Home Screen → Add.
+- **Already installed** — detected at runtime through `display-mode:
+  standalone`, `navigator.standalone` and the `appinstalled` event. Nothing
+  about installation is stored: a browser cannot observe an uninstall, so a
+  saved flag would silence the suggestion forever for someone who removed the
+  app.
+- **Dismissal** — *Not now* is the only thing remembered, for 7 days, as
+  `{"dismissedAt": "…"}`. It is never sent anywhere: no analytics, no install
+  tracking, no Firestore write. Profile always has the option for anyone who
+  wants it sooner.
+
+Icons are generated from `branding/powerpulse-source.png`, which sits outside
+`public/` so the high-resolution original is not copied into every deployment.
+
+The service worker caches only the build's content-hashed files under
+`assets/`. It never caches HTML, Firestore, Firebase Auth or map tiles, so a
+new deployment takes effect immediately and no report data is stored offline.
+
+### Base path and forks
+
+The manifest uses **relative** URLs (`"start_url": "./"`, `"scope": "./"`,
+`"src": "icons/…"`), which browsers resolve against the manifest's own address.
+It therefore works unchanged at `/` locally, at `/PowerPulse/` here, and under
+any fork's repository name - no build step and nothing to edit. `index.html`
+uses Vite's `%BASE_URL%` placeholder for the manifest, icons and favicon, and
+the service worker is registered at `${import.meta.env.BASE_URL}sw.js` with a
+matching scope. A fork that sets `VITE_BASE_PATH` gets all of this for free.
+
 ## Incident lifecycle
 
 An outage does not stay on the screen forever just because nobody said it

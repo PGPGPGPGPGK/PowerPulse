@@ -3,7 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b1220" />
+    <meta name="theme-color" content="#002556" />
+
+    <!-- %BASE_URL% is replaced by Vite with the deployment base, so these
+         resolve under /PowerPulse/ as well as at / locally. -->
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+    <link rel="icon" href="%BASE_URL%favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="%BASE_URL%icons/powerpulse-192.png" />
+    <link rel="apple-touch-icon" href="%BASE_URL%icons/powerpulse-apple-touch-180.png" />
+
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- Still required by iOS versions that do not honour the standard name. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="PowerPulse" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta
       name="description"
       content="PowerPulse - community electricity outage reporting for Hyderabad. Prototype with demo data."

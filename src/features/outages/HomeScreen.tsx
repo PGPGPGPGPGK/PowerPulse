@@ -7,6 +7,7 @@ import { LocationBar } from '../../components/LocationBar';
 import { OfficialInfoCard } from '../../components/OfficialInfoCard';
 import { NearbyIncidentCard } from '../../components/NearbyIncidentCard';
 import { EmptyState } from '../../components/ui';
+import { InstallCard } from '../../components/InstallCard';
 
 /**
  * Home answers four things and nothing more: is there an outage near me, how
@@ -86,6 +87,8 @@ export function HomeScreen({ onNavigate }: { onNavigate: (route: Route) => void 
           <Map size={18} aria-hidden="true" /> View Hyderabad map
         </button>
       </section>
+
+      <InstallCard />
     </div>
   );
 }

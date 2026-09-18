@@ -1,0 +1,32 @@
+{
+  "name": "PowerPulse",
+  "short_name": "PowerPulse",
+  "description": "Community-powered electricity outage reporting and nearby outage discovery.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#002556",
+  "background_color": "#0b1220",
+  "icons": [
+    {
+      "src": "icons/powerpulse-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/powerpulse-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/powerpulse-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
